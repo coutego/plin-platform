@@ -1,0 +1,19 @@
+{
+  "name": "plin-platform",
+  "version": "0.0.1",
+  "description": "Pluggable & Injectable Platform for ClojureScript",
+  "bin": {
+    "create-plin-app": "./bin/create-plin-app.js"
+  },
+  "scripts": {
+    "start": "nbb -m plin-platform.server",
+    "build": "nbb -m plin-platform.build-single-file",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "nbb": "^1.9.193",
+    "react": "^18.2.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

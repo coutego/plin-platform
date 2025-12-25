@@ -1,0 +1,5 @@
+.aider*
+node-modules
+package-lock.json
+/.nbb/
+/node_modules/

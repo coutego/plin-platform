@@ -1,0 +1,656 @@
+* PLIN Platform
+
+*PLIN* (PLuggable & INjectable) is a data-driven plugin architecture for ClojureScript applications.
+This repository contains the *PLIN Platform*, a set of core libraries and standard plugins to build modular SPAs.
+
+** Quick Start (Demo)
+
+To see the platform in action (the demo application included in this repo):
+
+#+BEGIN_SRC bash
+npm install
+npm start
+#+END_SRC
+
+Open [[http://localhost:8000/?mode=demo]]
+
+** Creating a New Application
+
+To create a new application based on PLIN Platform, you can use the initialization script included in this repository.
+
+*** 1. Run the Initialization Script
+
+#+BEGIN_SRC bash
+# Run the script directly from the repo root
+# Usage: node bin/create-plin-app.js <your-app-name>
+
+node bin/create-plin-app.js my-app
+#+END_SRC
+
+This command will:
+1. Create a new directory ~my-app~.
+2. Generate configuration files (~package.json~, ~nbb.edn~, ~manifest.edn~).
+3. Create a sample plugin with a basic UI.
+4. Install dependencies automatically.
+
+*** 2. Start Your App
+
+#+BEGIN_SRC bash
+cd my-app
+npm start
+#+END_SRC
+
+Open [[http://localhost:8000]]. You will see the PLIN App Shell with your new plugin loaded alongside the standard platform features (Navigation, Auth, Admin, etc.).
+
+*** 3. Build for Production
+
+To generate a single-file HTML bundle (zero dependencies, easy deployment):
+
+#+BEGIN_SRC bash
+npm run build
+#+END_SRC
+
+The output will be at ~target/index.html~.
+
+** Configuration & Manifest
+
+The *Manifest* (~manifest.edn~) is the entry point for your application. It tells the bootstrapper which plugins to load.
+
+*** Default Behavior
+By default, the PLIN Platform loads a standard set of plugins (App Shell, Navigation, Authentication, Admin UI, etc.) *before* loading your application plugins. This allows you to start building features immediately without wiring up infrastructure.
+
+*** Opting Out (Bare Bones Mode)
+If you want full control and do *not* want the standard platform plugins loaded automatically, add a config entry to your ~manifest.edn~:
+
+#+BEGIN_SRC clojure
+[{:config {:include-platform? false}} ;; <--- Disables standard plugins
+ {:id :my-app
+  :tags [:ui]
+  :files ["src/my_app/core.cljs"]
+  :entry "my-app.core"}]
+#+END_SRC
+
+** Core Concepts
+
+*** Interface vs. Implementation
+You will notice plugins in ~libs/plinpt~ are paired:
+- *~i-database~* (Interface): Defines the contract (beans, extension points) but no logic.
+- *~p-alasql-db~* (Implementation): Provides the actual logic.
+
+This is a useful practice, strongly recommended for bigger applications.
+*Rule*: Your code should depend on *Interfaces* (~i-*~), not specific *Implementations* (~p-*~). This allows you to swap the provider without cascading dependencies.
+It also allows to have what are effectively run-time circular dependencies in a safe and controlled way. Two plugins can interact with each other through
+the interfaces, so it's only at runtime that they will cross-referencing each other, not at build or bootstrap time.
+
+*** Dependency Injection
+Everything in PLIN is a "Bean". Beans are defined in the ~:beans~ map of a plugin.
+- *Values*: ~[:= {:some "config"}]~
+- *Functions*: ~[:= (fn [db] ...)]~
+- *Components*: ~[:= my-reagent-component]~
+
+To use a bean from another plugin, simply refer to its fully qualified keyword (e.g., ~::i-db/executor~) in your bean definition. The container handles the wiring.
+
+** Architecture
+
+This repository is organized to separate the "Platform" code from "User" code.
+
+- *~libs/plin~*: The core framework (Bootstrapper, IoC Container).
+- *~libs/plinpt~*: The *PLIN Platform*. A standard library of plugins (Admin UI, Auth, Database, UI Components).
+- *~src/plin_platform~*: Server and Build tools.
+
+When you use PLIN as a library, the server (~plin-platform.server~) acts as a virtual file server:
+1. It serves framework files (~libs/...~) from the installed library location.
+2. It serves your project files (~src/...~, ~manifest.edn~) from your current working directory.
+
+** Tutorial: Creating Your First Plugin
+
+Let's add a simple "Hello World" feature to the application.
+
+*** Step 1: Create the Plugin File
+Create a new file at ~src/showcase/hello.cljs~:
+
+#+BEGIN_SRC clojure
+(ns showcase.hello
+  (:require [plin.core :as plin]
+            [plinpt.i-nav-bar :as nav]   ;; We want to add a menu item
+            [plinpt.i-app-shell :as shell])) ;; We want to register a route
+
+;; 1. Define the UI Component
+(defn hello-page []
+  [:div {:class "p-10"}
+   [:h1 {:class "text-4xl font-bold text-blue-600"} "Hello, PLIN!"]
+   [:p {:class "mt-4 text-gray-600"} "This is my first custom plugin."]])
+
+;; 2. Define the Plugin Definition
+(def plugin
+  (plin/plugin
+   {:doc "My first custom plugin."
+    ;; Declare dependencies on the interfaces we use
+    :deps [nav/plugin shell/plugin]
+
+    ;; Contribute to extensions defined by other plugins
+    :contributions
+    {;; Add a link to the Navigation Bar
+     ::nav/items [{:label "Hello" :route "/hello" :order 1}]
+     
+     ;; Register the Route
+     ::shell/routes [{:path "/hello" :component hello-page}]}
+
+    ;; Define internal beans (optional)
+    :beans {}}))
+#+END_SRC
+
+*** Step 2: Test with Dynamic Loader (Optional)
+Before registering the plugin permanently, you can test it live without restarting the server.
+
+1.  Open the application in your browser.
+2.  Navigate to *Dev Tools* (Wrench icon) -> *Dynamic Loader*.
+3.  Upload your ~src/showcase/hello.cljs~ file.
+4.  The system will compile the file, reload the container, and your "Hello" link should appear in the navigation bar immediately.
+
+*** Step 3: Register in Manifest
+To make the plugin permanent, open ~manifest.edn~ (in your project root) and add your new plugin to the vector.
+*Note*: Ensure you add the ~:ui~ tag so it loads in the browser.
+
+#+BEGIN_SRC clojure
+[
+  ...
+  {:id :showcase-hello
+   :tags [:ui]
+   :files ["src/showcase/hello.cljs"]
+   :entry "showcase.hello"}
+]
+#+END_SRC
+
+*** Step 4: Reload
+Refresh your browser. You should see a "Hello" link in the navigation bar, which leads to your new page.
+
+** More Examples
+
+*** Example 1: Replacing the App Shell
+
+This tutorial demonstrates the power of Dependency Injection. We will replace the entire application layout (App Shell) with a completely different implementation, without changing any other part of the system and loading and unloading it live.
+
+**** Step 1: Create the Plugin File
+Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the ~i-app-shell~ interface but provides a completely different UI.
+
+#+BEGIN_SRC clojure
+(ns showcase.fancy-shell
+  (:require [reagent.core :as r]
+            [clojure.string :as str]
+            [plin.core :as plin]
+            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-authorization :as iauth]
+            [plinpt.i-breadcrumb :as ibread]
+            [plinpt.i-nav-bar :as inav]))
+
+;; --- Router Logic ---
+
+(defonce current-route (r/atom nil))
+
+(defn- match-route [route-defs path]
+  (let [clean-path (if (or (str/blank? path) (= path "#")) "/" (str/replace path #"^#" ""))]
+    (or (some (fn [def]
+                (let [def-path (:path def)]
+                  (if (and def-path (str/includes? def-path ":"))
+                    (let [path-parts (str/split clean-path #"/")
+                          def-parts (str/split def-path #"/")]
+                      (when (= (count path-parts) (count def-parts))
+                        (when (every? (fn [[p d]] (or (= p d) (str/starts-with? d ":")))
+                                      (map vector path-parts def-parts))
+                          def)))
+                    (when (= def-path clean-path) def))))
+              route-defs)
+        nil)))
+
+(defn- handle-hash-change [routes]
+  (let [hash (.-hash js/location)]
+    (reset! current-route (match-route routes hash))))
+
+;; --- State ---
+
+(defonce shell-state (r/atom {:collapsed? false}))
+
+;; --- Components ---
+
+(defn icon-menu []
+  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M4 6h16M4 12h16M4 18h16"}]])
+
+(defn icon-chevron-left []
+  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M15 19l-7-7 7-7"}]])
+
+(defn icon-chevron-right []
+  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M9 5l7 7-7 7"}]])
+
+(defn nav-item [item collapsed? current-route]
+  (let [active? (= (:route item) (:path current-route))
+        label (:label item)
+        initial (when (seq label) (subs label 0 1))]
+    [:a {:href (str "#" (:route item))
+         :class (str "flex items-center gap-3 p-3 rounded-xl transition-all duration-200 mb-1 group "
+                     (if active?
+                       "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                       "text-slate-400 hover:bg-white/5 hover:text-white"))
+         :title (when collapsed? label)}
+     
+     ;; Icon / Initial
+     [:div {:class (str "w-6 h-6 flex items-center justify-center flex-shrink-0 transition-colors "
+                        (if active? "text-cyan-400" "text-slate-500 group-hover:text-white"))}
+      (if (:icon item)
+        [(:icon item)]
+        [:span {:class "font-bold text-lg uppercase"} initial])]
+     
+     ;; Label
+     [:span {:class (str "font-medium truncate transition-all duration-300 "
+                         (if collapsed? "w-0 opacity-0" "w-auto opacity-100"))}
+      label]]))
+
+(defn sidebar [items user-widget collapsed?]
+  [:aside {:class (str "bg-black/20 backdrop-blur-lg border-r border-white/10 flex flex-col transition-all duration-300 z-20 "
+                       (if collapsed? "w-20" "w-72"))}
+   
+   ;; Header / Toggle
+   [:div {:class "h-20 flex items-center justify-between px-0 border-b border-white/5 relative"}
+    [:div {:class (str "flex items-center gap-3 px-6 transition-opacity duration-300 "
+                       (if collapsed? "opacity-0 pointer-events-none" "opacity-100"))}
+     [:div {:class "w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold"} "P"]
+     [:h1 {:class "text-xl font-black tracking-tighter text-white whitespace-nowrap"} "PLIN OS"]]
+    
+    ;; Toggle Button
+    [:button {:class "absolute right-0 top-0 h-full w-12 flex items-center justify-center text-slate-500 hover:text-white transition-colors"
+              :on-click #(swap! shell-state update :collapsed? not)}
+     (if collapsed? [icon-chevron-right] [icon-chevron-left])]]
+
+   ;; Navigation
+   [:nav {:class "flex-1 px-3 py-6 overflow-y-auto overflow-x-hidden scrollbar-hide"}
+    (when-not collapsed?
+      [:div {:class "px-3 text-xs font-bold text-slate-600 uppercase tracking-wider mb-4"} "Menu"])
+    
+    (doall
+     (for [item (sort-by :order items)]
+       ^{:key (:route item)}
+       [nav-item item collapsed? @current-route]))]
+
+   ;; User Widget (Bottom)
+   [:div {:class "p-4 border-t border-white/10 bg-black/20 min-h-[80px] flex items-center justify-center overflow-hidden"}
+    [:div {:class (str "transition-all duration-300 "
+                       (if collapsed? "scale-75" "scale-100 w-full"))}
+     (if user-widget
+       [user-widget]
+       [:div {:class "text-slate-500 text-sm"} "No User"])]]])
+
+(defn fancy-layout [routes overlays can? user-atom breadcrumb nav-items user-widget]
+  ;; Setup Router
+  (let [hash-handler #(handle-hash-change routes)]
+    (set! (.-onhashchange js/window) hash-handler)
+    (handle-hash-change routes)
+    
+    (fn []
+      (let [active-route @current-route
+            Page (:component active-route)
+            collapsed? (:collapsed? @shell-state)]
+        [:div {:class "min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white font-sans flex overflow-hidden"}
+         
+         ;; Sidebar
+         [sidebar nav-items user-widget collapsed?]
+
+         ;; Main Area
+         [:main {:class "flex-1 flex flex-col h-screen overflow-hidden relative"}
+          ;; Decorative background elements
+          [:div {:class "absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0"}
+           [:div {:class "absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"}]
+           [:div {:class "absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"}]]
+
+          ;; Top Bar
+          [:header {:class "h-20 flex-shrink-0 flex items-center justify-between px-8 z-10"}
+           [:div {:class "flex items-center gap-4"}
+            (when breadcrumb 
+              [:div {:class "bg-white/5 px-4 py-2 rounded-full border border-white/10 backdrop-blur-sm"}
+               [breadcrumb]])]
+           [:div {:class "flex gap-4"}
+            ;; Actions placeholder
+            ]]
+
+          ;; Content
+          [:div {:class "flex-1 overflow-auto px-8 pb-8 z-10"}
+           [:div {:class "bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 min-h-full shadow-2xl relative overflow-hidden"}
+            (cond
+              (not Page) 
+              [:div {:class "flex flex-col items-center justify-center h-full text-slate-400"}
+               [:div {:class "text-6xl mb-4 font-thin"} "404"]
+               [:div "Destination Unknown"]]
+              
+              (and (:required-perm active-route) (not (can? (:required-perm active-route))))
+              [:div {:class "flex flex-col items-center justify-center h-full text-red-400"}
+               [:div {:class "text-6xl mb-4 font-thin"} "403"]
+               [:div "Access Restricted"]]
+              
+              :else [Page])]]]
+
+         ;; Overlays
+         (for [[idx comp] (map-indexed vector overlays)]
+           ^{:key idx} [comp])]))))
+
+(def plugin
+  (plin/plugin
+   {:doc "A fancy, dark-themed replacement for the App Shell."
+    :deps [iapp/plugin iauth/plugin ibread/plugin inav/plugin]
+    
+    :beans
+    {::iapp/ui
+     ^{:doc "Fancy App Shell UI."
+       :reagent-component true
+       :api {:args [] :ret :hiccup}}
+     [partial fancy-layout
+      ::iapp/routes
+      ::iapp/overlay-components
+      ::iauth/can?
+      ::iauth/user
+      ::ibread/ui
+      ::inav/items
+      ::inav/user-widget]}}))
+#+END_SRC
+
+**** Step 2: Test with Dynamic Loader
+1.  Open the application in your browser.
+2.  Navigate to *Dev Tools* -> *Dynamic Loader*.
+3.  Upload ~src/showcase/fancy_shell.cljs~.
+4.  *Result*: The entire application UI transforms instantly to a dark, modern theme with a collapsible sidebar. The navigation items and user widget are preserved but rendered differently.
+
+This works because both the default shell and this fancy shell implement the same interface (~i-app-shell~) and consume the same beans (~::inav/items~, ~::iauth/user~).
+
+*** Example 2: Global Command Palette
+
+This example demonstrates how to create a global overlay component (triggered by keyboard shortcuts) that interacts with the routing system. It features fuzzy search and keyboard navigation.
+
+**** Step 1: Create the Plugin File
+Create ~src/showcase/command_palette.cljs~:
+
+#+BEGIN_SRC clojure
+(ns showcase.command-palette
+  (:require [reagent.core :as r]
+            [clojure.string :as str]
+            [plin.core :as plin]
+            [plinpt.i-app-shell :as iapp]))
+
+;; --- State ---
+
+(defonce state (r/atom {:open? false
+                        :query ""
+                        :selected-index 0}))
+
+;; --- Logic ---
+
+(defn toggle! []
+  (swap! state update :open? not)
+  (when (:open? @state)
+    (swap! state assoc :query "" :selected-index 0)))
+
+(defn close! []
+  (swap! state assoc :open? false))
+
+(defn navigate! [route]
+  (when route
+    (set! (.-hash js/location) (:path route))
+    (close!)))
+
+(defn fuzzy-match? [query text]
+  (let [q (str/replace (str/lower-case query) #"\s+" "")
+        t (str/lower-case text)]
+    (loop [qi 0 ti 0]
+      (cond
+        (= qi (count q)) true
+        (= ti (count t)) false
+        (= (nth q qi) (nth t ti)) (recur (inc qi) (inc ti))
+        :else (recur qi (inc ti))))))
+
+(defn filter-routes [routes query]
+  (let [candidates (->> routes
+                        (filter :path)
+                        (sort-by :path))]
+    (if (str/blank? query)
+      (take 100 candidates)
+      (->> candidates
+           (filter #(fuzzy-match? query (:path %)))
+           (take 100)))))
+
+(defn handle-input-keydown [e filtered selected-index]
+  (let [max-idx (dec (count filtered))]
+    (condp = (.-key e)
+      "ArrowDown" (do (.preventDefault e)
+                      (swap! state update :selected-index #(min (inc %) max-idx)))
+      "ArrowUp"   (do (.preventDefault e)
+                      (swap! state update :selected-index #(max (dec %) 0)))
+      "Enter"     (do (.preventDefault e)
+                      (navigate! (nth filtered selected-index nil)))
+      "Escape"    (close!)
+      nil)))
+
+;; --- Sub-Components ---
+
+(defn search-input [query filtered selected-index]
+  [:div {:class "flex items-center border-b border-slate-700 px-4"}
+   [:svg {:class "w-5 h-5 text-slate-500 mr-3" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+    [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"}]]
+   [:input {:id "cmd-palette-input"
+            :type "text"
+            :auto-focus true
+            :class "flex-1 h-14 outline-none text-white placeholder:text-slate-500 bg-transparent text-lg"
+            :placeholder "Go to..."
+            :value query
+            :on-change #(swap! state assoc :query (.. % -target -value) :selected-index 0)
+            :on-key-down #(handle-input-keydown % filtered selected-index)}]])
+
+(defn result-item [idx route selected-index]
+  (let [selected? (= idx selected-index)]
+    [:div {:id (when selected? "cmd-palette-selected")
+           :class (str "px-4 py-3 mx-2 rounded-lg cursor-pointer flex items-center justify-between transition-colors "
+                       (if selected?
+                         "bg-blue-600 text-white"
+                         "text-slate-300 hover:bg-slate-700/50"))
+           :on-click #(navigate! route)
+           :on-mouse-move #(when-not selected?
+                             (swap! state assoc :selected-index idx))}
+
+     [:div {:class "flex items-center gap-3"}
+      [:svg {:class (str "w-4 h-4 " (if selected? "text-blue-200" "text-slate-500"))
+             :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+       [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M13 7l5 5m0 0l-5 5m5-5H6"}]]
+
+      [:span {:class "font-mono text-sm"} (:path route)]]
+
+     (when selected?
+       [:span {:class "text-xs text-blue-200 font-bold opacity-75"} "⏎"])]))
+
+(defn results-list [filtered selected-index]
+  (if (empty? filtered)
+    [:div {:class "p-8 text-center text-slate-500"}
+     [:div "No matching routes found."]]
+
+    ;; Added [&::-webkit-scrollbar]:hidden to hide scrollbar in WebKit
+    ;; Added style for Firefox/IE
+    [:div {:class "max-h-[60vh] overflow-y-auto py-2 scroll-smooth [&::-webkit-scrollbar]:hidden"
+           :style {:scrollbar-width "none" :ms-overflow-style "none"}}
+     (doall
+      (for [[idx route] (map-indexed vector filtered)]
+        ^{:key (:path route)}
+        [result-item idx route selected-index]))]))
+
+(defn palette-footer []
+  [:div {:class "bg-slate-900/50 px-4 py-2 text-xs text-slate-500 flex justify-between border-t border-slate-700"}
+   [:div {:class "flex gap-3"}
+    [:span "↑↓ to navigate"]
+    [:span "↵ to select"]
+    [:span "esc to close"]]
+   [:span "PLIN Command Palette"]])
+
+;; --- Main Component ---
+
+(defn palette-component [routes]
+  (r/create-class
+   {:component-did-mount
+    (fn []
+      (js/window.addEventListener "keydown"
+        (fn [e]
+          (when (and (or (.-ctrlKey e) (.-metaKey e))
+                     (= (.-key e) "k"))
+            (.preventDefault e)
+            (toggle!)))))
+
+    :component-did-update
+    (fn []
+      (when (:open? @state)
+        (when-let [el (.getElementById js/document "cmd-palette-selected")]
+          (.scrollIntoView el #js {:block "nearest"}))))
+
+    :reagent-render
+    (fn []
+      (let [{:keys [open? query selected-index]} @state
+            filtered (filter-routes routes query)]
+
+        (when open?
+          [:div {:class "fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] font-sans"}
+           ;; Backdrop
+           [:div {:class "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+                  :on-click close!}]
+
+           ;; Modal
+           [:div {:class "relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"}
+            [search-input query filtered selected-index]
+            [results-list filtered selected-index]
+            [palette-footer]]])))}))
+
+(def plugin
+  (plin/plugin
+   {:doc "A global command palette triggered by Ctrl+K / Cmd+K."
+    :deps [iapp/plugin]
+
+    :contributions
+    {::iapp/overlay-components [::ui]}
+
+    :beans
+    {::ui
+     ^{:doc "The Command Palette Overlay Component."
+       :reagent-component true
+       :api {:args [] :ret :hiccup}}
+     [partial palette-component ::iapp/routes]}}))
+#+END_SRC
+
+**** Step 2: Register in Manifest
+Add to ~manifest.edn~:
+
+#+BEGIN_SRC clojure
+{:id :showcase-command-palette
+ :tags [:ui]
+ :files ["src/showcase/command_palette.cljs"]
+ :entry "showcase.command-palette"}
+#+END_SRC
+
+**** Step 3: Test
+Reload the app and press ~Ctrl+K~ or ~Cmd+K~.
+
+*** Example 3: Zen Mode
+
+This example shows how to inject global styles and UI elements to create a "Zen Mode" that hides the sidebar and header for distraction-free viewing.
+
+**** Step 1: Create the Plugin File
+Create ~src/showcase/zen_mode.cljs~:
+
+#+BEGIN_SRC clojure
+(ns showcase.zen-mode
+  (:require [reagent.core :as r]
+            [plin.core :as plin]
+            [plinpt.i-app-shell :as iapp]))
+
+(defonce zen? (r/atom false))
+
+(defn toggle-zen! []
+  (swap! zen? not)
+  (if @zen?
+    (.-add (.-classList js/document.body) "zen-mode")
+    (.-remove (.-classList js/document.body) "zen-mode")))
+
+(defn zen-style []
+  [:style
+   "
+   /* Hide Header (Top Bar) */
+   header { display: none !important; }
+
+   /* Hide Sidebar */
+   aside { display: none !important; }
+   
+   /* Hide Breadcrumbs if they are in a separate container or nav */
+   .breadcrumb-container, nav[aria-label='Breadcrumb'] { display: none !important; }
+   
+   /* Force Main content to be full width */
+   main { 
+      width: 100% !important; 
+      max-width: 100% !important; 
+      margin: 0 !important;
+      padding-left: 2rem !important;
+      padding-right: 2rem !important;
+   }
+   "])
+
+(defn icon-leaf []
+  [:svg {:class "w-5 h-5" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
+           :d "M12 19l9 2-9-18-9 18 9-2zm0 0v-8"}]])
+
+(defn header-button []
+  [:button {:class (str "p-2 rounded-full transition-all duration-300 "
+                        (if @zen? 
+                          "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] rotate-180" 
+                          "text-slate-400 hover:text-white hover:bg-white/10"))
+            :on-click toggle-zen!
+            :title "Enter Zen Mode"}
+   [icon-leaf]])
+
+(defn floating-overlay []
+  (when @zen?
+    [:div
+     [zen-style]
+     [:div {:class "fixed bottom-6 right-6 z-50 animate-in fade-in zoom-in duration-300"}
+      [:button {:class "p-4 rounded-full bg-emerald-500 text-white shadow-lg hover:bg-emerald-600 hover:scale-110 transition-all duration-200"
+                :on-click toggle-zen!
+                :title "Exit Zen Mode"}
+       [icon-leaf]]]]))
+
+(def plugin
+  (plin/plugin
+   {:doc "Zen Mode Toggle Plugin."
+    :deps [iapp/plugin]
+    
+    :contributions
+    {::iapp/header-components [::header-btn]
+     ::iapp/overlay-components [::floating-overlay]}
+    
+    :beans
+    {::header-btn
+     ^{:doc "Zen Mode Toggle Button (Header)."
+       :reagent-component true
+       :api {:args [] :ret :hiccup}}
+     [:= header-button]
+
+     ::floating-overlay
+     ^{:doc "Zen Mode Overlay (Style + Floating Button)."
+       :reagent-component true
+       :api {:args [] :ret :hiccup}}
+     [:= floating-overlay]}}))
+#+END_SRC
+
+**** Step 2: Register in Manifest
+Add to ~manifest.edn~:
+
+#+BEGIN_SRC clojure
+{:id :showcase-zen-mode
+ :tags [:ui]
+ :files ["src/showcase/zen_mode.cljs"]
+ :entry "showcase.zen-mode"}
+#+END_SRC
+
+**** Step 3: Test
+Reload the app. You will see a leaf icon in the header. Clicking it enters Zen Mode, hiding the UI. A floating button appears in the bottom right to exit Zen Mode.

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClojureScript Dashboard</title>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <script>
+        window.SCITTLE_NREPL_WEBSOCKET_PORT = 1337;
+    </script>
+
+    <script src="https://unpkg.com/scittle@0.7.28/dist/scittle.js"></script>
+    <script src="https://unpkg.com/scittle@0.7.28/dist/scittle.reagent.js"></script>
+    <script src="https://unpkg.com/scittle@0.7.28/dist/scittle.nrepl.js"></script>
+    <script src="https://unpkg.com/scittle@0.7.28/dist/scittle.pprint.js"></script>
+    <script src="https://unpkg.com/scittle@0.7.28/dist/scittle.promesa.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alasql@4.16.0/dist/alasql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/clojure.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, sans-serif;
+        }
+    </style>
+
+
+    <script>
+        window.addEventListener("load", function() {
+            setTimeout(function() {
+                // The script creates 'window.ws_nrepl' when connected
+                if (window.ws_nrepl) {
+                    console.log("✅ WebSocket Wrapper found: window.ws_nrepl");
+                    console.log("Ready state:", window.ws_nrepl.readyState); // 1 = Connected
+                } else {
+                    console.error("❌ window.ws_nrepl is missing. Connection failed.");
+                }
+            }, 500); // Give it a moment to initialize
+        });
+    </script>
+</head>
+
+<body class="bg-gray-100">
+    <div id="app"></div>
+
+    <script>
+        var v = Date.now();
+        function load(path) {
+            document.write('<script type="application/x-scittle" src="' + path + '?v=' + v + '"><\/script>');
+        }
+
+        // --- CONFIGURATION START ---
+        
+        // 1. Check URL params for mode (e.g. index.html?mode=client)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlMode = urlParams.get('mode');
+
+        // 2. Default to demo if not specified
+        window.APP_MODE = urlMode || "demo"; 
+        
+        console.log("🚀 Starting App in mode:", window.APP_MODE);
+        
+        // 3. Fetch and Parse Manifests
+        function fetchEdn(path) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", path, false); // Synchronous
+            xhr.send(null);
+            if (xhr.status === 200) {
+                return xhr.responseText;
+            } else {
+                console.warn("Failed to load " + path);
+                return null;
+            }
+        }
+
+        function parseEDN(edn) {
+            if (!edn) return [];
+            try {
+                return scittle.core.eval_string("(cljs.core/clj->js " + edn + "\n)");
+            } catch (e) {
+                console.error("Failed to parse EDN", e);
+                return [];
+            }
+        }
+
+        // A. Load User Manifest
+        var userEdn = fetchEdn("manifest.edn");
+        var userManifest = parseEDN(userEdn);
+        
+        // B. Check for Config (Opt-out of platform plugins)
+        // We look for a special entry: {:config {:include-platform? false}}
+        var configEntry = userManifest.find(function(item) { return item.config; });
+        var includePlatform = true;
+        if (configEntry && configEntry.config && configEntry.config['include-platform?'] === false) {
+            includePlatform = false;
+        }
+
+        // C. Load Platform Manifest (if not opted out)
+        var platformManifest = [];
+        if (includePlatform) {
+            var platformEdn = fetchEdn("libs/plinpt/manifest.edn");
+            platformManifest = parseEDN(platformEdn);
+        }
+
+        // D. Merge
+        window.SYSTEM_MANIFEST = platformManifest.concat(userManifest);
+        console.log("📦 Loaded Plugins:", window.SYSTEM_MANIFEST.length, "(Platform: " + platformManifest.length + ")");
+
+        // --- CONFIGURATION END ---
+
+        // Load Libs (Static)
+        load("libs/malli/core.cljs");
+        load("libs/malli/error.cljs");
+        load("libs/pluggable/container.cljc");
+        load("libs/pluggable/root_plugin.cljc");
+        load("libs/pluggable/core.cljc");
+        load("libs/injectable/easy.cljc");
+        load("libs/injectable/container.cljc");
+        load("libs/injectable/core.cljc");
+        load("libs/plin/core.cljc");
+        load("libs/plin/boot.cljc");
+
+        // Load Plugins Dynamically
+        var profiles = {
+            "demo": ["shared", "ui", "demo"],
+            "client": ["shared", "ui", "client"]
+        };
+        var activeTags = new Set(profiles[window.APP_MODE]);
+
+        window.SYSTEM_MANIFEST.forEach(function(plugin) {
+            // Skip config entries
+            if (plugin.config) return;
+
+            var hasTag = plugin.tags.some(function(t) { return activeTags.has(t); });
+            // Only load CLJS plugins (or unspecified type) via script tags
+            var isCljs = !plugin.type || plugin.type === 'cljs';
+            
+            if (hasTag && isCljs) {
+                // Load all files associated with this plugin
+                plugin.files.forEach(function(file) {
+                    load(file);
+                });
+            }
+        });
+
+        // Main Entry Point
+        load("client_boot.cljs");
+    </script>
+</body>
+
+</html>

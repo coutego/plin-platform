@@ -1,0 +1,191 @@
+(ns plinpt.p-devdoc.core
+  (:require [reagent.core :as r]))
+
+(defn highlight-code [code]
+  (let [tokens (re-seq #"(\"[^\"]*\")|(;.*)|(:[\w\-\.\/]+)|(\b\d+\b)|([\[\]\{\}\(\)])|(\s+)|([^\"\s;:\d\[\]\{\}\(\)]+)" code)]
+    [:pre {:class "bg-gray-800 text-gray-100 p-3 rounded text-xs overflow-x-auto font-mono"}
+     (for [[idx [match str-lit comment kw num bracket space other]] (map-indexed vector tokens)]
+       ^{:key idx}
+       (cond
+         str-lit [:span {:class "text-green-400"} match]
+         comment [:span {:class "text-gray-500 italic"} match]
+         kw      [:span {:class "text-purple-400"} match]
+         num     [:span {:class "text-orange-400"} match]
+         bracket [:span {:class "text-yellow-500"} match]
+         space   [:span match]
+         other   (if (re-matches #"^def|^defn|^let|^if|^when|^cond|^assoc|^update|^->|^apply|^map|^reduce" match)
+                   [:span {:class "text-blue-400 font-bold"} match]
+                   [:span {:class "text-gray-200"} match])
+         :else   [:span match]))]))
+
+(defn configure-marked []
+  (when (and js/window.marked js/window.hljs)
+    (js/marked.setOptions
+     #js {:highlight (fn [code lang]
+                       (if (and lang (js/hljs.getLanguage lang))
+                         (try
+                           (.-value (js/hljs.highlight code #js {:language lang}))
+                           (catch :default _
+                             code))
+                         (try
+                           (.-value (js/hljs.highlightAuto code))
+                           (catch :default _
+                             code))))})))
+
+(defonce _init-marked (configure-marked))
+
+(defn markdown-view [content]
+  (if (and js/window.marked content)
+    [:div {:class "prose prose-blue max-w-none"
+           :dangerouslySetInnerHTML {:__html (js/marked.parse content)}}]
+    [:div {:class "whitespace-pre-wrap font-mono text-sm bg-gray-50 p-4 rounded"}
+     (or content "No documentation available.")]))
+
+(defn plugin-detail-view [plugin on-back]
+  (let [show-tech (r/atom false)]
+    (fn [plugin on-back]
+      [:div {:class "bg-white rounded-lg shadow-sm border border-gray-200"}
+       ;; Header
+       [:div {:class "p-6 border-b border-gray-200 flex justify-between items-start"}
+        [:div
+         [:div {:class "flex items-center gap-3"}
+          [:button {:class "text-gray-400 hover:text-gray-600" :on-click on-back}
+           [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+            [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M10 19l-7-7m0 0l7-7m-7 7h18"}]]]
+          [:h2 {:class "text-2xl font-bold text-gray-900"} (str (:id plugin))]]
+         [:p {:class "mt-1 text-gray-500"} (:description plugin)]]
+        
+        [:span {:class (str "px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wide "
+                            (if (= (:type plugin) :infrastructure)
+                              "bg-gray-100 text-gray-800"
+                              "bg-blue-100 text-blue-800"))}
+         (name (:type plugin))]]
+
+       ;; Functional Docs
+       [:div {:class "p-6"}
+        [markdown-view (:doc-functional plugin)]]
+
+       ;; Technical Docs Toggle
+       [:div {:class "border-t border-gray-200"}
+        [:button {:class "w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  :on-click #(swap! show-tech not)}
+         [:span {:class "font-semibold text-gray-700"} "Technical Implementation"]
+         [:svg {:class (str "w-5 h-5 text-gray-500 transform transition-transform "
+                            (if @show-tech "rotate-180" ""))
+                :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+          [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M19 9l-7 7-7-7"}]]]]
+
+       ;; Technical Docs Content
+       (when @show-tech
+         [:div {:class "p-6 bg-gray-50 border-t border-gray-200"}
+          [markdown-view (:doc-technical plugin)]])])))
+
+(defn- plugin-table [plugins on-select]
+  [:div {:class "overflow-x-auto"}
+   [:table {:class "min-w-full divide-y divide-gray-200"}
+    [:thead {:class "bg-gray-50"}
+     [:tr
+      [:th {:class "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"} "Plugin ID"]
+      [:th {:class "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"} "Description"]
+      [:th {:class "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"} "Key Responsibilities"]
+      [:th {:class "px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"} "Actions"]]]
+    [:tbody {:class "bg-white divide-y divide-gray-200"}
+     (if (empty? plugins)
+       [:tr
+        [:td {:class "px-6 py-4 whitespace-nowrap text-sm text-gray-500" :col-span 4} "No plugins registered."]]
+       (for [p (sort-by :id plugins)]
+         ^{:key (:id p)}
+         [:tr {:class "hover:bg-gray-50 transition-colors"}
+          [:td {:class "px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-600"} (str (:id p))]
+          [:td {:class "px-6 py-4 text-sm text-gray-500"} (:description p)]
+          [:td {:class "px-6 py-4 text-sm text-gray-500"} (:responsibilities p)]
+          [:td {:class "px-6 py-4 whitespace-nowrap text-right text-sm font-medium"}
+           [:button {:class "text-blue-600 hover:text-blue-900"
+                     :on-click #(on-select p)}
+            "View Docs"]]]))]]])
+
+(defn design-doc-view [plugins]
+  (let [selected-plugin (r/atom nil)]
+    (fn [plugins]
+      (let [infra (filter #(= (:type %) :infrastructure) plugins)
+            features (filter #(= (:type %) :feature) plugins)]
+        (if @selected-plugin
+          [plugin-detail-view @selected-plugin #(reset! selected-plugin nil)]
+          
+          [:div {:class "space-y-8 text-gray-800"}
+           ;; Title
+           [:div
+            [:h1 {:class "text-3xl font-bold text-gray-900"} "PLIN Demo - Application Design & Architecture"]
+            [:p {:class "mt-2 text-lg text-gray-600"}
+             "This document outlines the architectural design of the PLIN Demo application. The application is built as a modular Single Page Application (SPA) using ClojureScript, Reagent, and a custom plugin system based on Dependency Injection (DI)."]]
+
+           ;; Section 1
+           [:section
+            [:h2 {:class "text-2xl font-semibold text-gray-900 mb-4"} "1. Architectural Overview"]
+            [:p {:class "mb-4"} "The application is composed entirely of " [:strong "Plugins"] ". There is no monolithic \"core\" application logic; instead, a lightweight container loads a list of plugins."]
+            [:ul {:class "list-disc pl-5 space-y-2"}
+             [:li [:strong "Pluggable"] ": Handles the loading of plugins and the resolution of their dependencies."]
+             [:li [:strong "Injectable"] ": A Dependency Injection container that manages the lifecycle of \"Beans\" (components, state atoms, services)."]
+             [:li [:strong "Extension Points"] ": The primary mechanism for decoupling. A plugin can define an " [:em "Extension Point"] " (a contract), and other plugins can provide data or behavior to fulfill that contract."]]]
+
+           ;; Section 2
+           [:section
+            [:h2 {:class "text-2xl font-semibold text-gray-900 mb-4"} "2. Extension Point Examples"]
+            [:p {:class "mb-4"} "The power of this architecture lies in how plugins interact without direct coupling. Here are three key examples of Extension Points in action."]
+
+            [:div {:class "space-y-6"}
+             ;; Example A
+             [:div {:class "bg-gray-50 p-6 rounded-lg border border-gray-200"}
+              [:h4 {:class "text-lg font-bold text-gray-900 mb-2"} "Example A: Navigation Menu (:nav/items)"]
+              [:p {:class "mb-3 text-sm"} "The " [:code "nav-bar"] " plugin doesn't know what pages exist. It simply defines a slot for other plugins to register menu links."]
+
+              [:div {:class "mb-4"}
+               [:p {:class "font-semibold text-sm text-gray-700 mb-1"} "1. Definition (in plugins/nav_bar.cljs)"]
+               [highlight-code
+                "(defn- process-nav-items [db values]\n  (let [items (apply concat values)]\n    (-> db\n        (assoc :nav-bar/items items)\n        (update :beans assoc :nav-bar/items [:= items]))))\n\n(def plugin\n  {:id :nav-bar\n   :extensions \n   [{:key :nav/items\n     :handler process-nav-items\n     :doc \"Menu links...\"}]})"]]
+
+              [:div
+               [:p {:class "font-semibold text-sm text-gray-700 mb-1"} "2. Usage (in plugins/planning_feature.cljs)"]
+               [highlight-code
+                "(def plugin\n  {:id :planning-feature\n   :nav/items [{:label \"My Planning\" :route \"/planning\" :order 1}]})"]]]
+
+             ;; Example B
+             [:div {:class "bg-gray-50 p-6 rounded-lg border border-gray-200"}
+              [:h4 {:class "text-lg font-bold text-gray-900 mb-2"} "Example B: Home Page Dashboard (:home/features)"]
+              [:p {:class "mb-3 text-sm"} "The " [:code "home-feature"] " displays a grid of cards. It doesn't know what those cards represent. It asks other plugins to provide them."]
+
+              [:div {:class "mb-4"}
+               [:p {:class "font-semibold text-sm text-gray-700 mb-1"} "1. Definition (in plugins/home_feature.cljs)"]
+               [highlight-code
+                "(def plugin\n  {:id :home-feature\n   :extensions\n   [{:key :home/features\n     :handler process-features\n     :doc \"List of features...\"}]})"]]
+
+              [:div
+               [:p {:class "font-semibold text-sm text-gray-700 mb-1"} "2. Usage (in plugins/org_admin_feature.cljs)"]
+               [highlight-code
+                "(def plugin\n  {:id :org-admin-feature\n   :deps [home/plugin]\n   :home/features [{:title \"Organization Management\"\n                    :description \"Manage organizational structure...\"\n                    :icon icon-org\n                    :color-class \"bg-purple-500\"\n                    :href \"#/admin/structure\"}]})"]]]
+
+             ;; Example C
+             [:div {:class "bg-gray-50 p-6 rounded-lg border border-gray-200"}
+              [:h4 {:class "text-lg font-bold text-gray-900 mb-2"} "Example C: Persistence Defaults (:persistence/defaults)"]
+              [:p {:class "mb-3 text-sm"} "The " [:code "persistence"] " plugin is generic. It allows other plugins to define what data should exist in the database when the application starts for the first time."]
+
+              [:div {:class "mb-4"}
+               [:p {:class "font-semibold text-sm text-gray-700 mb-1"} "1. Definition (in plugins/persistence.cljs)"]
+               [highlight-code
+                "(def plugin\n  {:id :persistence-plugin\n   :extensions [{:key :persistence/defaults\n                 :handler process-defaults\n                 :doc \"Default values...\"}]})"]]
+
+              [:div
+               [:p {:class "font-semibold text-sm text-gray-700 mb-1"} "2. Usage (in plugins/org_admin_feature.cljs)"]
+               [highlight-code
+                "(def plugin\n  {:id :org-admin-feature\n   :persistence/defaults [{:plugin-id :org-admin-feature\n                           :key :teams\n                           :value default-teams}]})"]]]]]
+
+           ;; Section 4
+           [:section
+            [:h2 {:class "text-2xl font-semibold text-gray-900 mb-4"} "4. Plugin Catalog"]
+            [:p {:class "mb-4"} "The application is divided into " [:strong "Infrastructure Plugins"] " (generic capabilities) and " [:strong "Feature Plugins"] " (domain-specific logic)."]
+
+            [:h3 {:class "text-xl font-medium text-gray-900 mb-3"} "Infrastructure Plugins"]
+            [plugin-table infra #(reset! selected-plugin %)]
+
+            [:h3 {:class "text-xl font-medium text-gray-900 mt-6 mb-3"} "Feature Plugins"]
+            [plugin-table features #(reset! selected-plugin %)]]])))))

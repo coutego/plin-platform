@@ -105,18 +105,71 @@
         // We look for a special entry: {:config {:include-platform? false}}
         var configEntry = userManifest.find(function(item) { return item.config; });
         var includePlatform = true;
-        if (configEntry && configEntry.config && configEntry.config['include-platform?'] === false) {
-            includePlatform = false;
+        var headConfig = null;
+        if (configEntry && configEntry.config) {
+            if (configEntry.config['include-platform?'] === false) {
+                includePlatform = false;
+            }
+            // Extract head configuration
+            headConfig = configEntry.config.head;
         }
 
-        // C. Load Platform Manifest (if not opted out)
+        // C. Inject Head Resources (blocking, before app loads)
+        if (headConfig) {
+            console.log("📦 Injecting head resources from manifest config...");
+            
+            // C1. Inject blocking scripts
+            if (headConfig.scripts && Array.isArray(headConfig.scripts)) {
+                headConfig.scripts.forEach(function(script) {
+                    if (typeof script === 'string') {
+                        document.write('<script src="' + script + '"><\/script>');
+                    } else if (script.src) {
+                        var attrs = 'src="' + script.src + '"';
+                        if (script.async) attrs += ' async';
+                        if (script.defer) attrs += ' defer';
+                        if (script.type) attrs += ' type="' + script.type + '"';
+                        if (script.crossorigin) attrs += ' crossorigin="' + script.crossorigin + '"';
+                        document.write('<script ' + attrs + '><\/script>');
+                    }
+                });
+            }
+            
+            // C2. Inject stylesheets
+            if (headConfig.styles && Array.isArray(headConfig.styles)) {
+                headConfig.styles.forEach(function(style) {
+                    var href = typeof style === 'string' ? style : style.href;
+                    if (href) {
+                        var link = document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = href;
+                        if (style.media) link.media = style.media;
+                        document.head.appendChild(link);
+                    }
+                });
+            }
+            
+            // C3. Inject inline styles
+            if (headConfig['inline-styles']) {
+                var styleEl = document.createElement('style');
+                styleEl.textContent = headConfig['inline-styles'];
+                document.head.appendChild(styleEl);
+            }
+            
+            // C4. Configure Tailwind (if tailwind object exists)
+            if (headConfig.tailwind && window.tailwind) {
+                console.log("🎨 Applying Tailwind config from manifest...");
+                window.tailwind.config = headConfig.tailwind;
+            }
+        }
+
+        // D. Load Platform Manifest (if not opted out)
         var platformManifest = [];
         if (includePlatform) {
             var platformEdn = fetchEdn("libs/plinpt/manifest.edn");
             platformManifest = parseEDN(platformEdn);
         }
 
-        // D. Merge
+        // E. Merge
         window.SYSTEM_MANIFEST = platformManifest.concat(userManifest);
         console.log("📦 Loaded Plugins:", window.SYSTEM_MANIFEST.length, "(Platform: " + platformManifest.length + ")");
 

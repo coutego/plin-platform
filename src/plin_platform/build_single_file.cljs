@@ -16,8 +16,45 @@
             [plin.boot]
             [plin-platform.client-boot]))
 
-(def template-html
-  "<!DOCTYPE html>
+(defn generate-template-html [head-config]
+  (let [;; Generate script tags from config
+        script-tags (when-let [scripts (:scripts head-config)]
+                      (str/join "\n    "
+                        (map (fn [script]
+                               (if (string? script)
+                                 (str "<script src=\"" script "\"></script>")
+                                 (let [{:keys [src async defer type crossorigin]} script
+                                       attrs (cond-> (str "src=\"" src "\"")
+                                               async (str " async")
+                                               defer (str " defer")
+                                               type (str " type=\"" type "\"")
+                                               crossorigin (str " crossorigin=\"" crossorigin "\""))]
+                                   (str "<script " attrs "></script>"))))
+                             scripts)))
+        
+        ;; Generate stylesheet links from config
+        style-tags (when-let [styles (:styles head-config)]
+                     (str/join "\n    "
+                       (map (fn [style]
+                              (let [href (if (string? style) style (:href style))
+                                    media (when (map? style) (:media style))]
+                                (if media
+                                  (str "<link rel=\"stylesheet\" href=\"" href "\" media=\"" media "\">")
+                                  (str "<link rel=\"stylesheet\" href=\"" href "\">"))))
+                            styles)))
+        
+        ;; Generate inline styles
+        inline-styles (when-let [inline (:inline-styles head-config)]
+                        (str "<style>" inline "</style>"))
+        
+        ;; Generate Tailwind config script
+        tailwind-config-script (when-let [tw-config (:tailwind head-config)]
+                                 (str "<script>tailwind.config = " (js/JSON.stringify (clj->js tw-config)) ";</script>"))
+        
+        ;; Combine all head injections
+        head-injections (str/join "\n    " (remove nil? [script-tags style-tags inline-styles tailwind-config-script]))]
+    
+    (str "<!DOCTYPE html>
 <html lang=\"en\">
 <head>
     <meta charset=\"UTF-8\">
@@ -35,6 +72,7 @@
     <script src=\"https://cdn.tailwindcss.com\"></script>
     <script src=\"https://cdn.tailwindcss.com?plugins=typography\"></script>
     
+    " (when (seq head-injections) (str head-injections "\n    ")) "
     <script src=\"https://cdn.jsdelivr.net/npm/marked/marked.min.js\"></script>
     <script src=\"https://cdn.jsdelivr.net/npm/alasql@4.4.0/dist/alasql.min.js\"></script>
     <script src=\"https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js\"></script>
@@ -82,7 +120,7 @@
       ;; --- FILE CONTENT END ---
     </script>
 </body>
-</html>")
+</html>")))
 
 (def user-root (js/process.cwd))
 
@@ -158,6 +196,18 @@
           (vec (concat platform-manifest user-manifest))))
       user-manifest)))
 
+(defn get-head-config []
+  ;; Extract head config from manifest
+  (let [root-manifest (path/join user-root "manifest.edn")
+        public-manifest (path/join user-root "public/manifest.edn")
+        path (cond 
+               (fs/existsSync root-manifest) "manifest.edn"
+               (fs/existsSync public-manifest) "public/manifest.edn"
+               :else "manifest.edn")
+        user-manifest (edn/read-string (read-file path))
+        config-entry (first (filter :config user-manifest))]
+    (get-in config-entry [:config :head])))
+
 (defn get-manifest-files []
   (let [manifest (get-manifest)
         ;; For the single file build, we assume "demo" mode
@@ -191,9 +241,14 @@
         ;; Use the framework's client bootstrapper
         main-entry ["src/plin_platform/client_boot.cljs"]
         
-        all-files (concat libs plugins main-entry)]
+        all-files (concat libs plugins main-entry)
+        
+        ;; Get head config for template generation
+        head-config (get-head-config)]
     
     (println "Found" (count all-files) "files to include.")
+    (when head-config
+      (println "Head config detected:" (pr-str head-config)))
     
     (let [content (str/join "\n\n;; ========================================================\n\n"
                             (map (fn [f] 
@@ -206,6 +261,9 @@
           ;; Prepare Manifest JSON for injection
           manifest-data (get-manifest)
           manifest-json (js/JSON.stringify (clj->js manifest-data))
+          
+          ;; Generate template with head config
+          template-html (generate-template-html head-config)
           
           ;; Replace placeholders
           final-html (-> template-html

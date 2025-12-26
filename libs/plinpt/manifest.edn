@@ -1,4 +1,5 @@
 [{:id :plinpt.i-devdoc :tags [:shared] :files ["libs/plinpt/i_devdoc.cljs"] :entry "plinpt.i-devdoc"}
+ {:id :plinpt.i-head-config :tags [:shared] :files ["libs/plinpt/i_head_config.cljs"] :entry "plinpt.i-head-config"}
  {:id :plinpt.i-app-shell :tags [:shared] :files ["libs/plinpt/i_app_shell.cljs"] :entry "plinpt.i-app-shell"}
  {:id :plinpt.i-nav-bar :tags [:shared] :files ["libs/plinpt/i_nav_bar.cljs"] :entry "plinpt.i-nav-bar"}
  {:id :plinpt.i-breadcrumb :tags [:shared] :files ["libs/plinpt/i_breadcrumb.cljs"] :entry "plinpt.i-breadcrumb"}
@@ -17,6 +18,7 @@
  {:id :plinpt.i-development :tags [:shared] :files ["libs/plinpt/i_development.cljs"] :entry "plinpt.i-development"}
  
  ;; Implementations (UI / Demo)
+ {:id :plinpt.p-head-config :tags [:ui] :files ["libs/plinpt/p_head_config/core.cljs" "libs/plinpt/p_head_config.cljs"] :entry "plinpt.p-head-config"}
  {:id :plinpt.p-app-shell :tags [:ui] :files ["libs/plinpt/p_app_shell/doc.cljs" "libs/plinpt/p_app_shell/core.cljs" "libs/plinpt/p_app_shell.cljs"] :entry "plinpt.p-app-shell"}
  {:id :plinpt.p-nav-bar :tags [:ui] :files ["libs/plinpt/p_nav_bar/core.cljs" "libs/plinpt/p_nav_bar.cljs"] :entry "plinpt.p-nav-bar"}
  {:id :plinpt.p-breadcrumb :tags [:ui] :files ["libs/plinpt/p_breadcrumb/core.cljs" "libs/plinpt/p_breadcrumb.cljs"] :entry "plinpt.p-breadcrumb"}

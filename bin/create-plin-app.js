@@ -3,13 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const https = require('https');
 
 const appName = process.argv[2];
 
 if (!appName) {
   console.error('Please provide an application name:');
-  console.error('  node path/to/plin-platform/bin/create-plin-app.js my-app');
+  console.error('  npx create-plin-app my-app');
   process.exit(1);
 }
 
@@ -17,38 +16,6 @@ const root = path.resolve(appName);
 const srcDir = path.join(root, 'src', appName.replace(/-/g, '_'));
 
 console.log(`Creating a new PLIN app in ${root}...`);
-
-// Helper to fetch latest SHA
-function getLatestSha() {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.github.com',
-      path: '/repos/coutego/plin-platform/commits?per_page=1',
-      headers: { 'User-Agent': 'create-plin-app' }
-    };
-
-    https.get(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        if (res.statusCode === 200) {
-          try {
-            const json = JSON.parse(data);
-            if (Array.isArray(json) && json.length > 0) {
-              resolve(json[0].sha);
-            } else {
-              reject(new Error('No commits found in repository.'));
-            }
-          } catch (e) {
-            reject(e);
-          }
-        } else {
-          reject(new Error(`GitHub API returned ${res.statusCode}: ${res.statusMessage}`));
-        }
-      });
-    }).on('error', reject);
-  });
-}
 
 async function main() {
   try {
@@ -62,14 +29,15 @@ async function main() {
     fs.mkdirSync(path.join(root, 'src'));
     fs.mkdirSync(srcDir);
 
-    // 2. Create package.json
+    // 2. Create package.json (npm dependency)
     const packageJson = {
       name: appName,
       version: '0.1.0',
       private: true,
       dependencies: {
-        nbb: "^1.0.0",
-        react: "^18.2.0"
+        "plin-platform": "^0.1.0",
+        "nbb": "^1.3.205",
+        "react": "^18.2.0"
       },
       scripts: {
         start: "nbb -m plin-platform.server",
@@ -82,31 +50,12 @@ async function main() {
       JSON.stringify(packageJson, null, 2)
     );
 
-    // 3. Create nbb.edn
-    console.log('Fetching latest platform version...');
-    let sha;
-    try {
-        sha = await getLatestSha();
-        console.log(`Using plin-platform commit: ${sha}`);
-    } catch (e) {
-        console.warn("Failed to fetch latest SHA from GitHub:", e.message);
-        console.warn("Falling back to a recent known SHA.");
-        // Fallback SHA (Full 40 chars to satisfy nbb)
-        // This corresponds to a recent commit. Update this periodically.
-        sha = "9d1cf93000000000000000000000000000000000"; // Placeholder, user might need to update
-    }
-
-    const nbbEdn = `{:deps {io.github.coutego/plin-platform {:git/url "https://github.com/coutego/plin-platform"
-                                             :git/sha "${sha}"}}}`;
+    // 3. Create nbb.edn (references node_modules)
+    const nbbEdn = `{:paths ["src" 
+         "node_modules/plin-platform/src"
+         "node_modules/plin-platform/libs"]}`;
 
     fs.writeFileSync(path.join(root, 'nbb.edn'), nbbEdn);
-
-    // 3b. Create deps.edn (for compatibility and explicit paths)
-    const depsEdn = `{:paths ["src" "libs" "public"]
- :deps {io.github.coutego/plin-platform {:git/url "https://github.com/coutego/plin-platform"
-                                         :git/sha "${sha}"}}}`;
-    
-    fs.writeFileSync(path.join(root, 'deps.edn'), depsEdn);
 
     // 4. Create manifest.edn
     const manifestEdn = `[{:id :${appName}

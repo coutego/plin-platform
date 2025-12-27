@@ -16,14 +16,15 @@ Open [[http://localhost:8000/?mode=demo]]
 
 ** Creating a New Application
 
-To create a new application based on PLIN Platform, you can use the initialization script included in this repository.
+To create a new application based on PLIN Platform, you can use the initialization script.
 
 *** 1. Run the Initialization Script
 
 #+BEGIN_SRC bash
-# Run the script directly from the repo root
-# Usage: node bin/create-plin-app.js <your-app-name>
+# Using npx (recommended - uses the published npm package)
+npx --package=plin-platform create-plin-app my-app
 
+# Or if developing locally, run from the repo root:
 node bin/create-plin-app.js my-app
 #+END_SRC
 
@@ -98,8 +99,16 @@ This repository is organized to separate the "Platform" code from "User" code.
 - *~libs/plinpt~*: The *PLIN Platform*. A standard library of plugins (Admin UI, Auth, Database, UI Components).
 - *~src/plin_platform~*: Server and Build tools.
 
-When you use PLIN as a library, the server (~plin-platform.server~) acts as a virtual file server:
-1. It serves framework files (~libs/...~) from the installed library location.
+*** Configuration Files
+
+- *~nbb.edn~*: Configuration for nbb (Node Babashka) - specifies source paths for the ClojureScript runtime.
+- *~package.json~*: npm package configuration with dependencies and scripts.
+- *~manifest.edn~*: Plugin manifest that defines which plugins to load.
+
+*** How It Works
+
+When you use PLIN as an npm dependency, the server (~plin-platform.server~) acts as a virtual file server:
+1. It serves framework files (~libs/...~) from the installed ~node_modules/plin-platform~ location.
 2. It serves your project files (~src/...~, ~manifest.edn~) from your current working directory.
 
 ** Tutorial: Creating Your First Plugin
@@ -661,3 +670,4 @@ Add to ~manifest.edn~:
 
 **** Step 3: Test
 Reload the app. You will see a leaf icon in the header. Clicking it enters Zen Mode, hiding the UI. A floating button appears in the bottom right to exit Zen Mode.
+

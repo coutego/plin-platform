@@ -3,3 +3,5 @@ node-modules
 package-lock.json
 /.nbb/
 /node_modules/
+/.DS_Store
+/README.html

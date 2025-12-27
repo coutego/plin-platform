@@ -118,38 +118,45 @@
 ;; --- Main Component ---
 
 (defn palette-component [routes]
-  (r/create-class
-   {:component-did-mount
-    (fn []
-      (js/window.addEventListener "keydown"
-        (fn [e]
-          (when (and (or (.-ctrlKey e) (.-metaKey e))
-                     (= (.-key e) "k"))
-            (.preventDefault e)
-            (toggle!)))))
+  (let [listener-fn (atom nil)]
+    (r/create-class
+     {:component-did-mount
+      (fn []
+        (let [handler (fn [e]
+                        (when (and (or (.-ctrlKey e) (.-metaKey e))
+                                   (= (.-key e) "k"))
+                          (.preventDefault e)
+                          (toggle!)))]
+          (reset! listener-fn handler)
+          (js/window.addEventListener "keydown" handler)))
 
-    :component-did-update
-    (fn []
-      (when (:open? @state)
-        (when-let [el (.getElementById js/document "cmd-palette-selected")]
-          (.scrollIntoView el #js {:block "nearest"}))))
-    
-    :reagent-render
-    (fn []
-      (let [{:keys [open? query selected-index]} @state
-            filtered (filter-routes routes query)]
-        
-        (when open?
-          [:div {:class "fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] font-sans"}
-           ;; Backdrop
-           [:div {:class "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-                  :on-click close!}]
-           
-           ;; Modal
-           [:div {:class "relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"}
-            [search-input query filtered selected-index]
-            [results-list filtered selected-index]
-            [palette-footer]]])))}))
+      :component-will-unmount
+      (fn []
+        (when @listener-fn
+          (js/window.removeEventListener "keydown" @listener-fn)))
+
+      :component-did-update
+      (fn []
+        (when (:open? @state)
+          (when-let [el (.getElementById js/document "cmd-palette-selected")]
+            (.scrollIntoView el #js {:block "nearest"}))))
+      
+      :reagent-render
+      (fn []
+        (let [{:keys [open? query selected-index]} @state
+              filtered (filter-routes routes query)]
+
+          (when open?
+            [:div {:class "fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] font-sans"}
+             ;; Backdrop
+             [:div {:class "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+                    :on-click close!}]
+
+             ;; Modal
+             [:div {:class "relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"}
+              [search-input query filtered selected-index]
+              [results-list filtered selected-index]
+              [palette-footer]]])))})))
 
 (def plugin
   (plin/plugin

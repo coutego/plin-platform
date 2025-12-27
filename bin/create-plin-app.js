@@ -123,23 +123,23 @@ async function main() {
             [plinpt.i-app-shell :as shell]))
 
 ;; 1. Define a UI Component
-(defn home-page []
+(defn hello-page []
   [:div {:class "p-10"}
-   [:h1 {:class "text-3xl font-bold text-blue-600"} "Welcome to ${appName}"]
+   [:h1 {:class "text-3xl font-bold text-blue-600"} "Hello! Welcome to ${appName}"]
    [:p {:class "mt-4"} "Built with PLIN Platform."]])
 
 ;; 2. Define the Plugin
 (def plugin
   (plin/plugin
-   {:doc "My Application Plugin"
+   {:doc "My Application Hello Plugin"
     :deps [nav/plugin shell/plugin]
     
     :contributions
     {;; Add a link to the Navigation Bar
-     ::nav/items [{:label "Home" :route "/home" :order 1}]
+     ::nav/items [{:label "Hello" :route "/hello" :order 1}]
      
      ;; Register the Route
-     ::shell/routes [{:path "/home" :component home-page}]}}))
+     ::shell/routes [{:path "/hello" :component hello-page}]}}))
 `;
 
     fs.writeFileSync(path.join(srcDir, 'core.cljs'), coreCljs);

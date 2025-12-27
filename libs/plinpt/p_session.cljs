@@ -17,7 +17,19 @@
      :deps [isession/plugin iauth/plugin inav/plugin iapp/plugin iservice/plugin invoker/plugin idev/plugin]
 
      :beans
-     {;; -- Authorization Implementation --
+     {;; -- Session User Data (reactive, for UI consumption) --
+      ::isession/user-data
+      ^{:doc "Reactive atom containing current user info for UI consumption."
+        :api {:ret :atom}}
+      [core/make-user-data-atom]
+
+      ;; -- Session User Actions (callbacks for UI) --
+      ::isession/user-actions
+      ^{:doc "Map of user-related actions/callbacks."
+        :api {:ret :map}}
+      [core/make-user-actions]
+
+      ;; -- Authorization Implementation --
       ::iauth/user
       ^{:doc "Reactive track containing the current user's data."
         :api {:ret :atom}}
@@ -61,10 +73,10 @@
       [partial (fn [user-service] (fn [] [core/login-modal user-service])) ::iservice/user-service]
 
       ::isession/user-widget
-      ^{:doc "User widget component for the navigation bar."
+      ^{:doc "Default user widget component using ::user-data and ::user-actions."
         :reagent-component true
         :api {:args [] :ret :hiccup}}
-      [:= core/user-widget]
+      [partial core/user-widget ::isession/user-data ::isession/user-actions]
 
       ::isession/state
       ^{:doc "Session state atom."
@@ -94,8 +106,12 @@
       [(fn [inv] (utils/make-service inv :permissions)) ::invoker/invoke]}
 
      :contributions
-     {;; Register UI
+     {;; Register the default user widget with the nav bar
       ::inav/user-widget [identity ::isession/user-widget]
+
+      ;; Also register user-data and user-actions for skins that want to build custom widgets
+      ::inav/user-data [identity ::isession/user-data]
+      ::inav/user-actions [identity ::isession/user-actions]
 
       ;; Mount the login modal via header-components
       ::iapp/header-components [identity ::isession/login-modal]

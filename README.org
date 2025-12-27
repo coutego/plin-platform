@@ -91,6 +91,32 @@ Everything in PLIN is a "Bean". Beans are defined in the ~:beans~ map of a plugi
 
 To use a bean from another plugin, simply refer to its fully qualified keyword (e.g., ~::i-db/executor~) in your bean definition. The container handles the wiring.
 
+*** Session & User Data (Skinnable Pattern)
+
+The session system uses a layered abstraction to support custom skins:
+
+1. *~::isession/user-data~*: Reactive atom with user info (~{:logged? :name :initials :avatar-url :roles :permissions}~)
+2. *~::isession/user-actions~*: Map of callbacks (~{:login! :logout! :show-profile!}~)
+3. *~::isession/user-widget~*: Default widget (skins can use or ignore)
+
+These are also available via the nav-bar interface (~::inav/user-data~, ~::inav/user-actions~, ~::inav/user-widget~).
+
+*For simple skins*: Just render ~[user-widget]~.
+
+*For custom skins*: Build your own UI using ~@user-data~ and ~user-actions~:
+
+#+BEGIN_SRC clojure
+(defn my-custom-user-ui [user-data user-actions]
+  (fn []
+    (let [{:keys [logged? name initials]} @user-data
+          {:keys [login! logout!]} user-actions]
+      (if logged?
+        [:div.my-style
+         [:span initials]
+         [:button {:on-click logout!} "Logout"]]
+        [:button {:on-click login!} "Login"]))))
+#+END_SRC
+
 ** Architecture
 
 This repository is organized to separate the "Platform" code from "User" code.
@@ -176,9 +202,11 @@ Refresh your browser. You should see a "Hello" link in the navigation bar, which
 
 ** More Examples
 
-*** Example 1: Replacing the App Shell
+*** Example 1: Replacing the App Shell (Custom Skin)
 
 This tutorial demonstrates the power of Dependency Injection. We will replace the entire application layout (App Shell) with a completely different implementation, without changing any other part of the system and loading and unloading it live.
+
+The key feature here is using ~::isession/user-data~ and ~::isession/user-actions~ to build a custom user widget that matches the skin's theme, rather than using the default ~::inav/user-widget~.
 
 **** Step 1: Create the Plugin File
 Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the ~i-app-shell~ interface but provides a completely different UI.
@@ -191,7 +219,8 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
             [plinpt.i-app-shell :as iapp]
             [plinpt.i-authorization :as iauth]
             [plinpt.i-breadcrumb :as ibread]
-            [plinpt.i-nav-bar :as inav]))
+            [plinpt.i-nav-bar :as inav]
+            [plinpt.i-session :as isession]))
 
 ;; --- Router Logic ---
 
@@ -222,10 +251,6 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
 
 ;; --- Components ---
 
-(defn icon-menu []
-  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M4 6h16M4 12h16M4 18h16"}]])
-
 (defn icon-chevron-left []
   [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
    [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M15 19l-7-7 7-7"}]])
@@ -245,35 +270,49 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
                        "text-slate-400 hover:bg-white/5 hover:text-white"))
          :title (when collapsed? label)}
      
-     ;; Icon / Initial
      [:div {:class (str "w-6 h-6 flex items-center justify-center flex-shrink-0 transition-colors "
                         (if active? "text-cyan-400" "text-slate-500 group-hover:text-white"))}
       (if (:icon item)
         [(:icon item)]
         [:span {:class "font-bold text-lg uppercase"} initial])]
      
-     ;; Label
      [:span {:class (str "font-medium truncate transition-all duration-300 "
                          (if collapsed? "w-0 opacity-0" "w-auto opacity-100"))}
       label]]))
 
-(defn sidebar [items user-widget collapsed?]
+;; Custom user widget for this skin using user-data and user-actions
+(defn custom-user-widget [user-data user-actions collapsed?]
+  (let [{:keys [logged? name initials]} @user-data
+        {:keys [login! logout!]} user-actions]
+    (if logged?
+      [:div {:class "flex items-center gap-3"}
+       [:div {:class "w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg"}
+        initials]
+       (when-not collapsed?
+         [:div {:class "flex-1 min-w-0"}
+          [:p {:class "text-sm font-medium text-white truncate"} name]
+          [:button {:class "text-xs text-cyan-400 hover:text-cyan-300"
+                    :on-click logout!}
+           "Sign out"]])]
+      [:button {:class (str "w-full py-2 px-4 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium hover:from-cyan-400 hover:to-blue-500 transition-all "
+                            (if collapsed? "text-xs" "text-sm"))
+                :on-click login!}
+       (if collapsed? "→" "Log in")])))
+
+(defn sidebar [items user-data user-actions collapsed?]
   [:aside {:class (str "bg-black/20 backdrop-blur-lg border-r border-white/10 flex flex-col transition-all duration-300 z-20 "
                        (if collapsed? "w-20" "w-72"))}
    
-   ;; Header / Toggle
    [:div {:class "h-20 flex items-center justify-between px-0 border-b border-white/5 relative"}
     [:div {:class (str "flex items-center gap-3 px-6 transition-opacity duration-300 "
                        (if collapsed? "opacity-0 pointer-events-none" "opacity-100"))}
      [:div {:class "w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold"} "P"]
      [:h1 {:class "text-xl font-black tracking-tighter text-white whitespace-nowrap"} "PLIN OS"]]
     
-    ;; Toggle Button
     [:button {:class "absolute right-0 top-0 h-full w-12 flex items-center justify-center text-slate-500 hover:text-white transition-colors"
               :on-click #(swap! shell-state update :collapsed? not)}
      (if collapsed? [icon-chevron-right] [icon-chevron-left])]]
 
-   ;; Navigation
    [:nav {:class "flex-1 px-3 py-6 overflow-y-auto overflow-x-hidden scrollbar-hide"}
     (when-not collapsed?
       [:div {:class "px-3 text-xs font-bold text-slate-600 uppercase tracking-wider mb-4"} "Menu"])
@@ -283,16 +322,12 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
        ^{:key (:route item)}
        [nav-item item collapsed? @current-route]))]
 
-   ;; User Widget (Bottom)
    [:div {:class "p-4 border-t border-white/10 bg-black/20 min-h-[80px] flex items-center justify-center overflow-hidden"}
     [:div {:class (str "transition-all duration-300 "
                        (if collapsed? "scale-75" "scale-100 w-full"))}
-     (if user-widget
-       [user-widget]
-       [:div {:class "text-slate-500 text-sm"} "No User"])]]])
+     [custom-user-widget user-data user-actions collapsed?]]]])
 
-(defn fancy-layout [routes overlays can? user-atom breadcrumb nav-items user-widget]
-  ;; Setup Router
+(defn fancy-layout [routes overlays can? user-atom breadcrumb nav-items user-data user-actions]
   (let [hash-handler #(handle-hash-change routes)]
     (set! (.-onhashchange js/window) hash-handler)
     (handle-hash-change routes)
@@ -303,27 +338,20 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
             collapsed? (:collapsed? @shell-state)]
         [:div {:class "min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white font-sans flex overflow-hidden"}
          
-         ;; Sidebar
-         [sidebar nav-items user-widget collapsed?]
+         [sidebar nav-items user-data user-actions collapsed?]
 
-         ;; Main Area
          [:main {:class "flex-1 flex flex-col h-screen overflow-hidden relative"}
-          ;; Decorative background elements
           [:div {:class "absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0"}
            [:div {:class "absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"}]
            [:div {:class "absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"}]]
 
-          ;; Top Bar
           [:header {:class "h-20 flex-shrink-0 flex items-center justify-between px-8 z-10"}
            [:div {:class "flex items-center gap-4"}
             (when breadcrumb 
               [:div {:class "bg-white/5 px-4 py-2 rounded-full border border-white/10 backdrop-blur-sm"}
                [breadcrumb]])]
-           [:div {:class "flex gap-4"}
-            ;; Actions placeholder
-            ]]
+           [:div {:class "flex gap-4"}]]
 
-          ;; Content
           [:div {:class "flex-1 overflow-auto px-8 pb-8 z-10"}
            [:div {:class "bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 min-h-full shadow-2xl relative overflow-hidden"}
             (cond
@@ -339,14 +367,13 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
               
               :else [Page])]]]
 
-         ;; Overlays
          (for [[idx comp] (map-indexed vector overlays)]
            ^{:key idx} [comp])]))))
 
 (def plugin
   (plin/plugin
-   {:doc "A fancy, dark-themed replacement for the App Shell."
-    :deps [iapp/plugin iauth/plugin ibread/plugin inav/plugin]
+   {:doc "A fancy, dark-themed replacement for the App Shell using user-data/user-actions pattern."
+    :deps [iapp/plugin iauth/plugin ibread/plugin inav/plugin isession/plugin]
     
     :beans
     {::iapp/ui
@@ -360,7 +387,8 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
       ::iauth/user
       ::ibread/ui
       ::inav/items
-      ::inav/user-widget]}}))
+      ::isession/user-data
+      ::isession/user-actions]}}))
 #+END_SRC
 
 **** Step 2: Test with Dynamic Loader
@@ -369,7 +397,7 @@ Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the
 3.  Upload ~src/showcase/fancy_shell.cljs~.
 4.  *Result*: The entire application UI transforms instantly to a dark, modern theme with a collapsible sidebar. The navigation items and user widget are preserved but rendered differently.
 
-This works because both the default shell and this fancy shell implement the same interface (~i-app-shell~) and consume the same beans (~::inav/items~, ~::iauth/user~).
+This works because both the default shell and this fancy shell implement the same interface (~i-app-shell~) and consume the same beans (~::inav/items~, ~::iauth/user~). The fancy shell uses ~::isession/user-data~ and ~::isession/user-actions~ to build a custom user widget that matches its dark theme.
 
 *** Example 2: Global Command Palette
 

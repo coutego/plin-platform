@@ -36,6 +36,13 @@
       (update :permissions normalize-set)
       (update :id to-keyword)))
 
+(defn- get-initials [name]
+  (when (and name (string? name) (seq name))
+    (let [parts (str/split (str/trim name) #"\s+")]
+      (if (= 1 (count parts))
+        (str/upper-case (subs (first parts) 0 (min 2 (count (first parts)))))
+        (str/upper-case (str (first (first parts)) (first (second parts))))))))
+
 ;; --- Accessors ---
 
 (defn get-current-user []
@@ -49,7 +56,7 @@
 
 (defn can? [perm]
   (let [perms (get-permissions)]
-    ;; UPDATED: Allow :perm/admin to grant all permissions
+    ;; Allow :perm/admin to grant all permissions
     (or (contains? perms :perm/admin)
         (contains? perms perm))))
 
@@ -60,16 +67,51 @@
 ;; --- Actions ---
 
 (defn set-user! [user]
-  (let [norm-user (normalize-user user)]
+  (let [norm-user (when user (normalize-user user))]
     (js/console.log "Session: Setting user to" (:name norm-user) "with permissions" (clj->js (:permissions norm-user)))
     (swap! session-state assoc :current-user norm-user :show-login? false)
-    (set! (.-hash js/location) "/")))
+    (when norm-user
+      (set! (.-hash js/location) "/"))))
 
 (defn open-login! []
   (swap! session-state assoc :show-login? true))
 
-(defn close-login! [] (swap! session-state assoc :show-login? false))
-(defn logout! [] (set-user! nil))
+(defn close-login! []
+  (swap! session-state assoc :show-login? false))
+
+(defn logout! []
+  (set-user! nil))
+
+(defn show-profile! []
+  ;; Default implementation: navigate to a profile page if it exists
+  (set! (.-hash js/location) "/profile"))
+
+;; --- Derived User Data (for UI consumption) ---
+
+(defn make-user-data-atom []
+  "Creates a reactive track that derives user-data from session-state."
+  (r/track
+   (fn []
+     (let [user (:current-user @session-state)]
+       (if user
+         {:logged? true
+          :name (:name user)
+          :initials (get-initials (:name user))
+          :avatar-url (:avatar-url user)
+          :roles (or (:roles user) #{})
+          :permissions (or (:permissions user) #{})}
+         {:logged? false
+          :name nil
+          :initials nil
+          :avatar-url nil
+          :roles #{}
+          :permissions #{}})))))
+
+(defn make-user-actions []
+  "Returns a map of user actions."
+  {:login! open-login!
+   :logout! logout!
+   :show-profile! show-profile!})
 
 ;; --- Components ---
 
@@ -129,26 +171,30 @@
              [:p {:class "text-xs text-gray-400"} "Mock Authentication - No password required"]]]]
           [:div {:style {:display "none"}}])))))
 
-(defn user-widget []
-  (let [user (get-current-user)]
-    (if user
-      [:div {:class "relative group h-full flex items-center"}
-       [:button {:class "flex items-center space-x-3 focus:outline-none"}
-        [:div {:class "h-8 w-8 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold shadow-sm border border-blue-500"}
-         (apply str (take 1 (:name user)))]
-        [:div {:class "text-left hidden md:block"}
-         [:p {:class "text-sm font-medium text-white"} (:name user)]
-         [:p {:class "text-xs text-blue-200"} "Logged in"]]]
+(defn user-widget
+  "Default user widget implementation using user-data and user-actions."
+  [user-data user-actions]
+  (fn []
+    (let [{:keys [logged? name initials]} @user-data
+          {:keys [login! logout!]} user-actions]
+      (if logged?
+        [:div {:class "relative group h-full flex items-center"}
+         [:button {:class "flex items-center space-x-3 focus:outline-none"}
+          [:div {:class "h-8 w-8 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold shadow-sm border border-blue-500"}
+           initials]
+          [:div {:class "text-left hidden md:block"}
+           [:p {:class "text-sm font-medium text-white"} name]
+           [:p {:class "text-xs text-blue-200"} "Logged in"]]]
 
-       ;; Dropdown
-       [:div {:class "absolute right-0 top-full pt-2 w-48 hidden group-hover:block z-50"}
-        [:div {:class "bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5"}
-         [:div {:class "px-4 py-2 border-b border-gray-100"}
-          [:p {:class "text-sm font-medium text-gray-900"} (:name user)]]
-         [:a {:href "#" :class "block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              :on-click #(do (.preventDefault %) (logout!))}
-          "Sign out"]]]]
+         ;; Dropdown
+         [:div {:class "absolute right-0 top-full pt-2 w-48 hidden group-hover:block z-50"}
+          [:div {:class "bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5"}
+           [:div {:class "px-4 py-2 border-b border-gray-100"}
+            [:p {:class "text-sm font-medium text-gray-900"} name]]
+           [:a {:href "#" :class "block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                :on-click #(do (.preventDefault %) (logout!))}
+            "Sign out"]]]]
 
-      [:button {:class "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none shadow-sm"
-                :on-click #(open-login!)}
-       "Log in"])))
+        [:button {:class "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none shadow-sm"
+                  :on-click #(login!)}
+         "Log in"]))))

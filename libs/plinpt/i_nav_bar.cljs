@@ -4,7 +4,7 @@
 
 (def plugin
   (plin/plugin
-   {:doc "Interface plugin for navigation bar, allowing contributions of menu items and user widget components."
+   {:doc "Interface plugin for navigation bar, allowing contributions of menu items, user widget, and user data/actions for custom skins."
     :deps [idev/plugin]
     
     :contributions
@@ -12,7 +12,7 @@
      ::icon "PL"
      ::idev/plugins [{:id :i-nav-bar
                       :description "Interface for the Navigation Bar."
-                      :responsibilities "Defines extension points for menu items and user widget."
+                      :responsibilities "Defines extension points for menu items, user widget, and user data/actions."
                       :type :infrastructure}]}
 
     :extensions
@@ -27,7 +27,13 @@
       :doc "Menu links {:label \"String\" :route \"/target\" :order int :required-perm keyword}"}
      {:key ::user-widget
       :handler (plin/collect-last ::user-widget)
-      :doc "User profile widget component"}]
+      :doc "User profile widget component (default implementation)"}
+     {:key ::user-data
+      :handler (plin/collect-last ::user-data)
+      :doc "Reactive atom with user info for custom skins: {:logged? :name :initials :avatar-url :roles :permissions}"}
+     {:key ::user-actions
+      :handler (plin/collect-last ::user-actions)
+      :doc "Map of user actions for custom skins: {:login! :logout! :show-profile!}"}]
 
     :beans
     {::ui
@@ -42,7 +48,24 @@
      [:= []]
 
      ::user-widget
-     ^{:doc "User widget component."
+     ^{:doc "User widget component (default implementation)."
        :reagent-component true
        :api {:args [] :ret :hiccup}}
-     [:= nil]}}))
+     [:= nil]
+
+     ::user-data
+     ^{:doc "Reactive atom with user info for custom skins."
+       :api {:ret :atom}}
+     [atom {:logged? false
+            :name nil
+            :initials nil
+            :avatar-url nil
+            :roles #{}
+            :permissions #{}}]
+
+     ::user-actions
+     ^{:doc "Map of user actions for custom skins."
+       :api {:ret :map}}
+     [:= {:login! (fn [] (js/console.warn "No session implementation: login!"))
+          :logout! (fn [] (js/console.warn "No session implementation: logout!"))
+          :show-profile! (fn [] (js/console.warn "No session implementation: show-profile!"))}]}}))

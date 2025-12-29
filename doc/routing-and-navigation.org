@@ -1,0 +1,532 @@
+* Routing and Navigation in PLIN Platform
+
+This document explains how the PLIN Platform implements navigation, routing, and shell rendering. It covers the architecture, data flow, and how applications can customize or completely replace the default user experience.
+
+** Overview
+
+The PLIN Platform separates concerns into three distinct layers:
+
+1. *Navigation Structure* (~i-application~): Defines WHAT pages exist and how they are organized
+2. *Routing* (~i-router~, ~p-hash-router~): Handles URL changes and determines WHICH page to show
+3. *Shell Rendering* (~i-app-shell~, ~p-app-shell~): Controls HOW the UI is displayed
+
+This separation allows you to customize any layer independently without affecting the others.
+
+** The Navigation Structure
+
+*** Nav Items: The Building Blocks
+
+Everything starts with *nav-items*. A nav-item is a map that describes a navigable location in your application:
+
+    {:id :dashboard
+     :label "Dashboard"
+     :description "Main dashboard view"
+     :route "dashboard"
+     :icon [:svg {...}]
+     :icon-color "text-blue-600 bg-blue-50"
+     :component dashboard-page
+     :order 1}
+
+Key properties:
+
+| Property       | Required | Description                                      |
+|----------------|----------|--------------------------------------------------|
+| ~:id~          | Yes      | Unique keyword identifier                        |
+| ~:label~       | Yes      | Display text in navigation                       |
+| ~:route~       | Yes      | URL segment (relative to parent)                 |
+| ~:component~   | No       | Reagent component to render                      |
+| ~:parent-id~   | No       | ID of parent item (for nesting)                  |
+| ~:icon~        | No       | Hiccup SVG for the icon                          |
+| ~:icon-color~  | No       | Tailwind classes for icon styling                |
+| ~:description~ | No       | Shown in parent page cards                       |
+| ~:order~       | No       | Sort order (lower = first)                       |
+| ~:required-perm~ | No     | Permission keyword required to access            |
+
+*** Contributing Nav Items
+
+Plugins contribute nav-items via the ~::iapp/nav-items~ extension:
+
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin]
+        
+        :contributions
+        {::iapp/nav-items [{:id :my-feature
+                           :label "My Feature"
+                           :route "my-feature"
+                           :component my-page
+                           :order 10}]}}))
+
+*** Hierarchical Navigation
+
+Nav items can be nested using ~:parent-id~:
+
+    ;; Root section
+    {:id :settings
+     :label "Settings"
+     :route "/settings"
+     :icon settings-icon
+     :order 100}
+    
+    ;; Child items
+    {:id :profile
+     :parent-id :settings
+     :label "Profile"
+     :route "profile"
+     :component profile-page
+     :order 1}
+    
+    {:id :security
+     :parent-id :settings
+     :label "Security"
+     :route "security"
+     :component security-page
+     :order 2}
+
+This creates:
+- ~/settings~ - Parent page (auto-generated if no component)
+- ~/settings/profile~ - Profile page
+- ~/settings/security~ - Security page
+
+*** The Application Tree
+
+The ~i-application~ plugin transforms flat nav-items into a hierarchical tree structure stored in ~::iapp/structure~. Each node in the tree has:
+
+- All original nav-item properties
+- ~:full-route~ - The complete URL path (e.g., ~/settings/profile~)
+- ~:children~ - Vector of child nodes (if any)
+
+*** Automatic Route Extraction
+
+When a nav-item has a ~:component~, a route is automatically created. The ~::iapp/nav-routes~ bean contains all routes extracted from the navigation tree.
+
+For parent items WITHOUT a component but WITH children, a default parent page is auto-generated that displays cards linking to each child.
+
+** The Routing System
+
+*** Interface (~i-router~)
+
+The router interface defines these beans:
+
+| Bean              | Type     | Description                              |
+|-------------------|----------|------------------------------------------|
+| ~::current-route~ | Atom     | Reactive atom with current matched route |
+| ~::navigate!~     | Function | Navigate to a path                       |
+| ~::match-route~   | Function | Match a path against routes              |
+| ~::setup!~        | Function | Initialize the router                    |
+| ~::all-routes~    | Vector   | All registered routes                    |
+| ~::initialized?~  | Atom     | Whether router is initialized            |
+
+*** Hash Router Implementation (~p-hash-router~)
+
+The default implementation uses browser hash URLs (e.g., ~#/settings/profile~).
+
+**** How It Works
+
+1. *Initialization*: ~setup!~ is called with the homepage path
+2. *Route Registration*: Routes from ~::iapp/nav-routes~ are registered
+3. *Hash Listening*: Listens to ~window.onhashchange~
+4. *Route Matching*: When hash changes, finds matching route
+5. *State Update*: Updates ~::current-route~ atom (triggers re-render)
+
+**** Route Matching
+
+Routes support:
+- *Exact matches*: ~/users~ matches only ~/users~
+- *Parameterized routes*: ~/users/:id~ matches ~/users/123~
+
+Parameters are extracted and available in ~(:params @current-route)~.
+
+*** Using the Router
+
+To navigate programmatically:
+
+    ;; Inject navigate! into your component
+    (defn my-component [navigate!]
+      [:button {:on-click #(navigate! "/settings")}
+       "Go to Settings"])
+
+To read current route:
+
+    ;; Inject current-route atom
+    (defn my-component [current-route]
+      (let [route @current-route]
+        [:div "Current path: " (:path route)]))
+
+** The Shell (App Layout)
+
+*** Interface (~i-app-shell~)
+
+The shell interface defines extension points:
+
+| Extension              | Description                           |
+|------------------------|---------------------------------------|
+| ~::routes~             | Additional route definitions          |
+| ~::header-components~  | Components in the header              |
+| ~::overlay-components~ | Global overlays (modals, toasts)      |
+
+And beans:
+
+| Bean                   | Description                           |
+|------------------------|---------------------------------------|
+| ~::ui~                 | The main shell component              |
+| ~::overlay-components~ | Collected overlay components          |
+| ~::header-components~  | Collected header components           |
+
+*** Default Shell (~p-app-shell~)
+
+The default shell provides:
+
+- Fixed header with logo, search, notifications, user widget
+- Collapsible drill-down sidebar
+- Breadcrumb navigation
+- Main content area
+- Global overlay container
+
+**** Component Hierarchy
+
+    [app-layout]
+    ├── [header]
+    │   ├── [hamburger-menu]
+    │   ├── [app-logo]
+    │   ├── [search-bar]
+    │   ├── [notifications]
+    │   └── [user-widget]
+    ├── [sidebar]
+    │   ├── [back-button]
+    │   ├── [nav-items]
+    │   └── [settings-button]
+    ├── [main-content]
+    │   ├── [breadcrumb]
+    │   └── [page-component]
+    └── [overlays]
+        └── [overlay-components...]
+
+** Customizing the Platform
+
+*** Level 1: Adding Pages
+
+The simplest customization - add new pages via nav-items:
+
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin]
+        :contributions
+        {::iapp/nav-items [{:id :my-page
+                           :label "My Page"
+                           :route "my-page"
+                           :component my-page-component}]}}))
+
+*** Level 2: Adding Overlays
+
+Add global components that render above everything:
+
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin]
+        :contributions
+        {::iapp/overlay-components [::my-overlay]}
+        :beans
+        {::my-overlay [:= my-overlay-component]}}))
+
+Examples: Command palette, toast notifications, global modals.
+
+*** Level 3: Customizing the Homepage
+
+Override the default homepage:
+
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin]
+        :contributions
+        {::iapp/homepage {:id :custom-home
+                          :label "Home"
+                          :route "/"
+                          :icon home-icon
+                          :component my-custom-home
+                          :order 0}}}))
+
+*** Level 4: Customizing App Metadata
+
+Override application name, description, or logo:
+
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin]
+        :contributions
+        {::iapp/name "My Application"
+         ::iapp/short-description "A custom PLIN app"
+         ::iapp/logo my-logo-component}}))
+
+*** Level 5: Replacing the Shell
+
+For complete control over the UI, replace the entire shell:
+
+    (ns my-app.custom-shell
+      (:require [plin.core :as plin]
+                [plinpt.i-application :as iapp]
+                [plinpt.i-router :as irouter]
+                [plinpt.i-authorization :as iauth]
+                [plinpt.i-session :as isession]))
+    
+    (defn my-shell [structure current-route navigate! can? user-data user-actions overlays]
+      ;; Your custom layout here
+      [:div.my-custom-shell
+       ;; Custom header
+       [:header ...]
+       
+       ;; Custom navigation
+       [:nav
+        (for [item (first-level-items structure)]
+          ^{:key (:id item)}
+          [:a {:href (str "#" (:full-route item))} (:label item)])]
+       
+       ;; Content area
+       [:main
+        (when-let [page (:component @current-route)]
+          [page])]
+       
+       ;; Overlays
+       (for [[idx overlay] (map-indexed vector overlays)]
+         ^{:key idx}
+         [overlay])])
+    
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin irouter/plugin iauth/plugin isession/plugin]
+        
+        :beans
+        {::iapp/ui
+         ^{:doc "Custom shell implementation"
+           :reagent-component true}
+         [partial my-shell
+          ::iapp/structure
+          ::irouter/current-route
+          ::irouter/navigate!
+          ::iauth/can?
+          ::isession/user-data
+          ::isession/user-actions
+          ::iapp/overlay-components]}}))
+
+**** Key Dependencies for Custom Shells
+
+| Bean                      | Purpose                              |
+|---------------------------|--------------------------------------|
+| ~::iapp/structure~        | Navigation tree                      |
+| ~::irouter/current-route~ | Current route (reactive)             |
+| ~::irouter/navigate!~     | Navigation function                  |
+| ~::irouter/setup!~        | Router initialization                |
+| ~::iauth/can?~            | Permission checking                  |
+| ~::iauth/user~            | Current user data                    |
+| ~::isession/user-data~    | User info for UI (name, initials)    |
+| ~::isession/user-actions~ | Login/logout callbacks               |
+| ~::iapp/overlay-components~ | Global overlays                    |
+| ~::iapp/homepage~         | Homepage configuration               |
+
+*** Level 6: Replacing the Router
+
+For different routing strategies (e.g., pushState, memory router):
+
+    (ns my-app.custom-router
+      (:require [reagent.core :as r]
+                [plin.core :as plin]
+                [plinpt.i-router :as irouter]
+                [plinpt.i-application :as iapp]))
+    
+    ;; Your router state
+    (defonce current-route (r/atom nil))
+    (defonce routes (atom []))
+    
+    (defn navigate! [path]
+      ;; Your navigation logic
+      (js/history.pushState nil "" path)
+      (update-current-route! path))
+    
+    (defn make-setup-fn [nav-routes]
+      ;; Register routes
+      (reset! routes nav-routes)
+      ;; Return setup function
+      (fn [homepage]
+        ;; Initialize router
+        (setup-popstate-listener!)
+        (navigate! homepage)))
+    
+    (def plugin
+      (plin/plugin
+       {:deps [irouter/plugin iapp/plugin]
+        
+        :beans
+        {::irouter/current-route [:= current-route]
+         ::irouter/navigate! [:= navigate!]
+         ::irouter/setup! [make-setup-fn ::iapp/nav-routes]
+         ::irouter/all-routes [identity ::iapp/nav-routes]}}))
+
+** Data Flow Summary
+
+Here's how everything connects:
+
+    1. Plugins contribute nav-items
+           ↓
+    2. i-application collects and builds tree (::structure)
+           ↓
+    3. Routes extracted from tree (::nav-routes)
+           ↓
+    4. Router receives routes, sets up listeners
+           ↓
+    5. User clicks link or types URL
+           ↓
+    6. Router matches route, updates ::current-route
+           ↓
+    7. Shell re-renders with new page component
+           ↓
+    8. Sidebar/breadcrumb update based on current path
+
+** Best Practices
+
+*** 1. Use Nav Items for Standard Pages
+
+Don't contribute routes directly unless you have a special case. Nav items give you:
+- Automatic sidebar entry
+- Automatic breadcrumb support
+- Automatic parent page generation
+- Consistent URL structure
+
+*** 2. Use the Bean Constructor Pattern
+
+When your nav-item needs an injected component:
+
+    :contributions
+    {::iapp/nav-items [::my-nav-item]}
+    
+    :beans
+    {::my-page [partial my-page-component ::some/dependency]
+     
+     ::my-nav-item
+     {:constructor [(fn [page]
+                      {:id :my-page
+                       :label "My Page"
+                       :route "my-page"
+                       :component page})
+                    ::my-page]}}
+
+*** 3. Respect the Permission System
+
+Always include ~:required-perm~ for protected pages:
+
+    {:id :admin-users
+     :label "User Management"
+     :route "users"
+     :component admin-users-page
+     :required-perm :perm/admin}
+
+*** 4. Keep Shell Replacements Minimal
+
+If you only need to change the header, consider:
+- Using ~::iapp/header-components~ to add components
+- Using CSS overrides via ~::ihead/inline-styles~
+- Wrapping the default shell instead of replacing it
+
+*** 5. Test with Different Routes
+
+When building custom shells, test:
+- Root path (/)
+- Nested paths (/settings/profile)
+- Parameterized paths (/users/123)
+- Invalid paths (404 handling)
+- Permission-protected paths (403 handling)
+
+** Example: Minimal Custom Shell
+
+Here's a complete example of a minimal custom shell:
+
+    (ns my-app.minimal-shell
+      (:require [reagent.core :as r]
+                [plin.core :as plin]
+                [plinpt.i-application :as iapp]
+                [plinpt.i-router :as irouter]
+                [plinpt.i-session :as isession]))
+    
+    (defn nav-link [item current-path navigate!]
+      (let [active? (= current-path (:full-route item))]
+        [:a {:href (str "#" (:full-route item))
+             :on-click (fn [e]
+                         (.preventDefault e)
+                         (navigate! (:full-route item)))
+             :class (if active? "font-bold text-blue-600" "text-gray-600")}
+         (:label item)]))
+    
+    (defn minimal-shell [structure current-route-atom navigate! setup! 
+                         homepage user-data user-actions overlays]
+      ;; Initialize router on first render
+      (r/create-class
+       {:component-did-mount
+        (fn []
+          (let [home-path (or (:route homepage) "/")]
+            (setup! home-path)))
+        
+        :reagent-render
+        (fn []
+          (let [route @current-route-atom
+                path (:path route)
+                Page (:component route)
+                {:keys [logged? name]} @user-data
+                {:keys [login! logout!]} user-actions]
+            
+            [:div {:class "min-h-screen"}
+             ;; Simple header
+             [:header {:class "bg-white shadow p-4 flex justify-between"}
+              [:h1 {:class "text-xl font-bold"} "My App"]
+              (if logged?
+                [:div
+                 [:span {:class "mr-4"} name]
+                 [:button {:on-click logout!} "Logout"]]
+                [:button {:on-click login!} "Login"])]
+             
+             ;; Simple nav
+             [:nav {:class "bg-gray-100 p-4"}
+              [:ul {:class "flex gap-4"}
+               (for [item structure]
+                 ^{:key (:id item)}
+                 [:li [nav-link item path navigate!]])]]
+             
+             ;; Content
+             [:main {:class "p-8"}
+              (if Page
+                [Page]
+                [:div "Page not found"])]
+             
+             ;; Overlays
+             (for [[idx comp] (map-indexed vector overlays)]
+               ^{:key idx}
+               [comp])]))}))
+    
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin irouter/plugin isession/plugin]
+        
+        :beans
+        {::iapp/ui
+         [partial minimal-shell
+          ::iapp/structure
+          ::irouter/current-route
+          ::irouter/navigate!
+          ::irouter/setup!
+          ::iapp/homepage
+          ::isession/user-data
+          ::isession/user-actions
+          ::iapp/overlay-components]}}))
+
+** Conclusion
+
+The PLIN Platform's navigation and routing system is designed for flexibility:
+
+- *Simple cases*: Just add nav-items with components
+- *Medium customization*: Override specific beans (homepage, logo, etc.)
+- *Full control*: Replace the entire shell or router
+
+The key is understanding the separation between:
+- Navigation structure (what exists)
+- Routing (URL handling)
+- Rendering (how it looks)
+
+Each layer can be customized independently, allowing you to build exactly the user experience you need while leveraging the platform's infrastructure.

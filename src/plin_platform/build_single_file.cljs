@@ -16,7 +16,10 @@
             [plin.boot]
             [plin-platform.client-boot]))
 
-(defn generate-template-html [head-config]
+(def current-env "browser")
+(def current-mode "demo")
+
+(defn generate-template-html [head-config initially-disabled-ids]
   (let [;; Generate script tags from config
         script-tags (when-let [scripts (:scripts head-config)]
                       (str/join "\n    "
@@ -52,7 +55,10 @@
                                  (str "<script>tailwind.config = " (js/JSON.stringify (clj->js tw-config)) ";</script>"))
         
         ;; Combine all head injections
-        head-injections (str/join "\n    " (remove nil? [script-tags style-tags inline-styles tailwind-config-script]))]
+        head-injections (str/join "\n    " (remove nil? [script-tags style-tags inline-styles tailwind-config-script]))
+        
+        ;; Generate disabled IDs array
+        disabled-ids-json (js/JSON.stringify (clj->js (vec initially-disabled-ids)))]
     
     (str "<!DOCTYPE html>
 <html lang=\"en\">
@@ -107,10 +113,12 @@
 <body class=\"bg-gray-100\">
     <div id=\"app\"></div>
     
-    <!-- Inject Manifest for the single file app -->
+    <!-- Inject Manifest and Config for the single file app -->
     <script>
       window.SYSTEM_MANIFEST = __MANIFEST_JSON__;
-      window.APP_MODE = \"demo\";
+      window.APP_MODE = \"" current-mode "\";
+      window.APP_ENV = \"" current-env "\";
+      window.INITIALLY_DISABLED_IDS = " disabled-ids-json ";
     </script>
 
     <!-- Application Code -->
@@ -124,42 +132,52 @@
 
 (def user-root (js/process.cwd))
 
-;; We calculate the classpath root (the directory containing the namespaces)
-;; Local Dev: .../src/plin_platform -> .../src
-;; NBB Cache: .../nbb-deps/plin_platform -> .../nbb-deps
-(def classpath-root (path/resolve (path/dirname *file*) ".."))
+;; Framework root: where plin-platform is installed
+;; When running as dependency: node_modules/plin-platform
+;; When running from repo: cwd
+(def framework-root
+  (let [nm-path (path/join user-root "node_modules/plin-platform")]
+    (if (fs/existsSync nm-path)
+      nm-path
+      user-root)))
 
-(defn resolve-framework-file [relative-path]
-  ;; Strategy 1: Local Development (Repo structure)
-  ;; relative-path is like "libs/malli/core.cljs" or "src/plin_platform/..."
-  ;; classpath-root is ".../src"
-  ;; We look in ".../src/../<relative-path>" -> ".../<relative-path>"
-  (let [repo-path (path/resolve classpath-root ".." relative-path)]
-    (if (fs/existsSync repo-path)
-      repo-path
-      ;; Strategy 2: NBB Cache (Flattened structure)
-      ;; classpath-root is ".../nbb-deps"
-      ;; We strip "libs/" or "src/" prefix and look inside classpath-root
-      (let [stripped (cond
-                       (str/starts-with? relative-path "libs/") (subs relative-path 5)
-                       (str/starts-with? relative-path "src/") (subs relative-path 4)
-                       :else relative-path)
-            flattened-path (path/join classpath-root stripped)]
-        (if (fs/existsSync flattened-path)
-          flattened-path
-          ;; Fallback to repo-path for error message consistency if neither found
-          repo-path)))))
-
-(defn resolve-path [file-path]
+(defn resolve-path
+  "Resolves a file path to an absolute path.
+   
+   Handles three cases:
+   1. Framework libs (libs/*) - Look in framework-root
+   2. Platform plugins (src/plinpt/*) - Look in framework-root
+   3. Framework tools (src/plin_platform/*) - Look in framework-root
+   4. User files - Look in user-root"
+  [file-path]
   (cond
-    ;; Framework internal files
-    (or (str/starts-with? file-path "libs/")
-        (str/starts-with? file-path "src/plin_platform/"))
-    (resolve-framework-file file-path)
-
-    ;; User files
+    ;; Framework libs (libs/malli, libs/plin, etc.)
+    (str/starts-with? file-path "libs/")
+    (let [fw-path (path/join framework-root file-path)]
+      (if (fs/existsSync fw-path)
+        fw-path
+        (path/join user-root file-path)))
+    
+    ;; Platform plugins (src/plinpt/*)
+    (str/starts-with? file-path "src/plinpt/")
+    (let [fw-path (path/join framework-root file-path)]
+      (if (fs/existsSync fw-path)
+        fw-path
+        (path/join user-root file-path)))
+    
+    ;; Framework tools (src/plin_platform/*)
+    (str/starts-with? file-path "src/plin_platform/")
+    (let [fw-path (path/join framework-root file-path)]
+      (if (fs/existsSync fw-path)
+        fw-path
+        (path/join user-root file-path)))
+    
+    ;; User files - check user-root first, then framework-root
     :else
-    (path/join user-root file-path)))
+    (let [user-path (path/join user-root file-path)]
+      (if (fs/existsSync user-path)
+        user-path
+        (path/join framework-root file-path)))))
 
 (defn read-file [file-path]
   (let [full-path (resolve-path file-path)]
@@ -167,20 +185,40 @@
       (fs/readFileSync full-path "utf8")
       (catch :default e
         (println "Error reading file:" full-path)
+        (println "  Original path:" file-path)
+        (println "  User root:" user-root)
+        (println "  Framework root:" framework-root)
         (js/console.error e)
         (throw e)))))
 
+(defn read-edn-file [file-path]
+  (when (fs/existsSync file-path)
+    (try
+      (edn/read-string (fs/readFileSync file-path "utf8"))
+      (catch :default e
+        (println "Warning: Could not parse" file-path ":" (.-message e))
+        nil))))
+
+(defn find-user-manifest-path []
+  (let [candidates [(path/join user-root "plin.edn")
+                    (path/join user-root "manifest.edn")
+                    (path/join user-root "public/plin.edn")
+                    (path/join user-root "public/manifest.edn")]]
+    (first (filter fs/existsSync candidates))))
+
+(defn find-platform-manifest-path []
+  (let [candidates [(path/join framework-root "src/plinpt/plin.edn")
+                    (path/join framework-root "libs/plinpt/plin.edn")
+                    (path/join user-root "src/plinpt/plin.edn")
+                    (path/join user-root "libs/plinpt/plin.edn")]]
+    (first (filter fs/existsSync candidates))))
+
 (defn get-manifest []
-  ;; 1. Load User Manifest
-  (let [root-manifest (path/join user-root "manifest.edn")
-        public-manifest (path/join user-root "public/manifest.edn")
-        path (cond 
-               (fs/existsSync root-manifest) "manifest.edn"
-               (fs/existsSync public-manifest) "public/manifest.edn"
-               :else "manifest.edn")
-        user-manifest (edn/read-string (read-file path))
+  (let [user-manifest-path (find-user-manifest-path)
+        user-manifest (if user-manifest-path
+                        (read-edn-file user-manifest-path)
+                        [])
         
-        ;; 2. Check for Opt-out
         config-entry (first (filter :config user-manifest))
         include-platform? (if (and config-entry 
                                    (contains? (:config config-entry) :include-platform?)
@@ -188,41 +226,63 @@
                             false
                             true)]
     
-    ;; 3. Merge with Platform Manifest if needed
+    (when user-manifest-path
+      (println "User manifest:" user-manifest-path))
+    
     (if include-platform?
-      (let [platform-manifest-path "libs/plinpt/manifest.edn"]
-        (println "Loading Platform Manifest from:" (resolve-path platform-manifest-path))
-        (let [platform-manifest (edn/read-string (read-file platform-manifest-path))]
-          (vec (concat platform-manifest user-manifest))))
+      (let [platform-path (find-platform-manifest-path)]
+        (if platform-path
+          (do
+            (println "Platform manifest:" platform-path)
+            (let [platform-manifest (read-edn-file platform-path)]
+              (vec (concat platform-manifest user-manifest))))
+          (do
+            (println "Warning: Platform manifest not found")
+            user-manifest)))
       user-manifest)))
 
 (defn get-head-config []
-  ;; Extract head config from manifest
-  (let [root-manifest (path/join user-root "manifest.edn")
-        public-manifest (path/join user-root "public/manifest.edn")
-        path (cond 
-               (fs/existsSync root-manifest) "manifest.edn"
-               (fs/existsSync public-manifest) "public/manifest.edn"
-               :else "manifest.edn")
-        user-manifest (edn/read-string (read-file path))
-        config-entry (first (filter :config user-manifest))]
-    (get-in config-entry [:config :head])))
+  (let [user-manifest-path (find-user-manifest-path)]
+    (when user-manifest-path
+      (let [user-manifest (read-edn-file user-manifest-path)
+            config-entry (first (filter :config user-manifest))]
+        (get-in config-entry [:config :head])))))
+
+(defn should-load-plugin?
+  "New filtering logic:
+   Load if: (envs absent OR current-env in envs) AND (modes absent OR current-mode in modes)"
+  [item env mode]
+  (and
+   ;; Not a config entry
+   (not (:config item))
+   ;; Check envs: absent means all environments
+   (let [envs (:envs item)]
+     (or (nil? envs) (empty? envs) (some #{(keyword env)} (map keyword envs))))
+   ;; Check modes: absent means all modes
+   (let [modes (:modes item)]
+     (or (nil? modes) (empty? modes) (some #{(keyword mode)} (map keyword modes))))))
+
+(defn get-initially-disabled-ids [manifest]
+  (->> manifest
+       (filter #(= (:enabled %) false))
+       (map :id)
+       (remove nil?)
+       set))
 
 (defn get-manifest-files []
-  (let [manifest (get-manifest)
-        ;; For the single file build, we assume "demo" mode
-        active-tags #{:shared :ui :demo}]
+  (let [manifest (get-manifest)]
     (->> manifest
-         (filter (fn [item]
-                   (let [item-tags (set (map keyword (:tags item)))]
-                     (some active-tags item-tags))))
+         (filter #(should-load-plugin? % current-env current-mode))
          (mapcat :files)
          vec)))
 
 (defn -main [& args]
   (println "Building single file application (via nbb)...")
+  (println "Environment:" current-env "| Mode:" current-mode)
+  (println "User root:" user-root)
+  (println "Framework root:" framework-root)
+  (println "")
   
-  ;; Ensure target directory exists in user root
   (let [target-dir (path/join user-root "target")]
     (when-not (fs/existsSync target-dir)
       (fs/mkdirSync target-dir)))
@@ -238,34 +298,32 @@
               "libs/plin/core.cljc"
               "libs/plin/boot.cljc"]
         plugins (get-manifest-files)
-        ;; Use the framework's client bootstrapper
         main-entry ["src/plin_platform/client_boot.cljs"]
         
         all-files (concat libs plugins main-entry)
         
-        ;; Get head config for template generation
-        head-config (get-head-config)]
+        head-config (get-head-config)
+        manifest-data (get-manifest)
+        initially-disabled-ids (get-initially-disabled-ids manifest-data)]
     
+    (println "")
     (println "Found" (count all-files) "files to include.")
     (when head-config
       (println "Head config detected:" (pr-str head-config)))
+    (when (seq initially-disabled-ids)
+      (println "Initially disabled:" initially-disabled-ids))
     
     (let [content (str/join "\n\n;; ========================================================\n\n"
                             (map (fn [f] 
                                    (str ";; File: " f "\n"
                                         (read-file f)))
                                  all-files))
-          ;; Escape closing script tags
           safe-content (str/replace content "</script>" "<\\u002fscript>")
           
-          ;; Prepare Manifest JSON for injection
-          manifest-data (get-manifest)
           manifest-json (js/JSON.stringify (clj->js manifest-data))
           
-          ;; Generate template with head config
-          template-html (generate-template-html head-config)
+          template-html (generate-template-html head-config initially-disabled-ids)
           
-          ;; Replace placeholders
           final-html (-> template-html
                          (str/replace "__CONTENT__" safe-content)
                          (str/replace "__MANIFEST_JSON__" manifest-json))
@@ -273,4 +331,5 @@
           output-path (path/join user-root "target/index.html")]
       
       (fs/writeFileSync output-path final-html)
+      (println "")
       (println "Successfully created" output-path))))

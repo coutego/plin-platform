@@ -40,8 +40,10 @@ async function main() {
         "react": "^18.2.0"
       },
       scripts: {
-        start: "nbb -m plin-platform.server",
-        build: "nbb -m plin-platform.build-single-file"
+        start: "node node_modules/plin-platform/bin/generate-server-boot.js --run",
+        "start:dev": "nbb -m plin-platform.server",
+        build: "nbb -m plin-platform.build-single-file",
+        "generate-boot": "node node_modules/plin-platform/bin/generate-server-boot.js"
       }
     };
 
@@ -52,6 +54,7 @@ async function main() {
 
     // 3. Create nbb.edn (references node_modules)
     const nbbEdn = `{:paths ["src" 
+         "target"
          "node_modules/plin-platform/src"
          "node_modules/plin-platform/libs"]}`;
 

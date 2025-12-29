@@ -29,13 +29,13 @@ We strictly separate the **API definition** from the **Logic implementation** to
 The system uses a `public/manifest.edn` file to determine which plugins to load based on the current execution mode.
 
 ### Adding a New Plugin
-To register a new plugin, you must add an entry to `public/manifest.edn`. Note the use of `libs/plinpt` path and `plinpt` namespace prefix:
+To register a new plugin, you must add an entry to `manifest.edn` (in your project root). For user plugins, use the `src/` path and your own namespace prefix:
 
     {:id :my-feature
      :tags [:ui :shared]
-     :files ["libs/plinpt/my_feature/core.cljs"
-             "libs/plinpt/my_feature.cljs"]
-     :entry "plinpt.my-feature"}
+     :files ["src/my_feature/core.cljs"
+             "src/my_feature.cljs"]
+     :entry "my-feature.core"}
 
 ### Tags and Modes
 Plugins are loaded based on **Tags**. The application runs in different modes (defined in `src/main.cljs` and `src/server.cljs`), and each mode activates specific tags.
@@ -229,3 +229,90 @@ The `:api` key in the metadata map should contain:
     2.  Ensure that functionality is exposed via a **Bean** in the container (e.g., `::boot/api`).
     3.  **Inject** that bean into your component or function via the `plugin` definition.
     4.  Pass the injected dependency to your logic.
+
+## 12. Navigation & Routing (Bean Constructor Pattern)
+
+The system uses `plinpt.i-application` as the central registry for navigation. To ensure Page Components (which are beans) are correctly resolved and injected into Navigation Items, use the **Bean Constructor Pattern**.
+
+### The Pattern
+1.  Define your **Page Component** as a bean (usually injecting services via `partial`).
+2.  Define your **Navigation Item** as a bean using `:constructor`. Inject the Page Component into it.
+3.  Contribute the **Navigation Item Bean** key to `::iapp/nav-items`.
+
+### Why?
+If you define the map directly in `:contributions`, the container cannot resolve the `::dashboard-page` reference inside that map. By using a constructor, the container resolves `::dashboard-page` first and passes the actual function to your constructor.
+
+### Example
+
+    (def plugin
+      (plin/plugin
+       {:deps [iapp/plugin]
+
+        :contributions
+        {;; Contribute the BEAN key, not the map directly
+         ::iapp/nav-items [::nav-dashboard]}
+
+        :beans
+        {;; 1. The Page Component (Dependencies injected)
+         ::dashboard-page
+         [partial ui/dashboard-page ::api-service]
+
+         ;; 2. The Navigation Item (Page injected)
+         ::nav-dashboard
+         {:constructor [(fn [page-component]
+                          {:id :dashboard
+                           :label "Dashboard"
+                           :route "dashboard"
+                           :icon [:svg ...] ;; Hiccup vector
+                           :component page-component}) ;; Injected here
+                        ::dashboard-page]}}}))
+
+## 13. Nav Item Structure
+
+Navigation items are maps that describe navigable locations in the application. They are contributed via the `::iapp/nav-items` extension.
+
+### Required Fields
+*   `:id` - Unique keyword identifier for the nav item
+*   `:label` - Display text for the navigation link
+*   `:route` - URL path segment (relative to parent, or absolute if starting with `/`)
+*   `:component` - Reagent component to render when this route is active
+
+### Optional Fields
+*   `:description` - Longer description text (used in auto-generated parent pages)
+*   `:icon` - Hiccup SVG vector for the navigation icon
+*   `:icon-color` - Tailwind classes for icon styling (e.g., `"text-blue-600 bg-blue-50"`)
+*   `:parent-id` - Keyword ID of parent nav item (for hierarchical navigation)
+*   `:required-perm` - Permission keyword required to access this page
+*   `:order` - Numeric sort order (lower values appear first)
+*   `:extra` - **Application-specific metadata** (see below)
+
+### The `:extra` Field
+
+The `:extra` field is an escape hatch for application-specific data that doesn't fit the standard nav-item schema. It allows custom shells and sidebars to access arbitrary metadata without polluting the core nav-item structure.
+
+**Use Cases:**
+*   Custom sidebar rendering hints (compact mode, special styling)
+*   Notification badges or counters
+*   Feature flags for conditional rendering
+*   Analytics tracking identifiers
+*   Custom renderer components
+*   Any application-specific metadata
+
+**Example:**
+
+    {:id :reports
+     :label "Reports"
+     :route "reports"
+     :component reports-page
+     :extra {:sidebar-style :compact
+             :badge-count 5
+             :feature-flag :beta-reports
+             :analytics-id "nav-reports"
+             :custom-renderer my-sidebar-renderer}}
+
+**Guidelines:**
+*   The platform's default shell passes `:extra` through unchanged
+*   Custom shells can read and interpret `:extra` as needed
+*   Keep `:extra` as a flat map for simplicity
+*   Document your application's `:extra` schema if it becomes complex
+*   Don't put standard nav-item fields in `:extra` - use the proper keys

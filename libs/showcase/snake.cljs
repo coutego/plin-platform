@@ -1,9 +1,7 @@
 (ns showcase.snake
   (:require [plin.core :as plin]
             [reagent.core :as r]
-            [plinpt.i-application :as iapp]
-            [plinpt.i-devtools :as idev]
-            [plinpt.i-app-shell :as shell]))
+            [plinpt.i-application :as iapp]))
 
 ;; --- Game Constants & Logic ---
 
@@ -114,8 +112,7 @@
 
 (defn game-over-overlay []
   (when (:game-over? @state)
-    [:div {:class "absoluteinset-0 z-10 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm rounded-lg"
-           :style {:position "absolute" :top 0 :left 0 :width "100%" :height "100%"}}
+    [:div {:class "absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm rounded-lg"}
      [:h2 {:class "text-4xl text-red-500 font-bold mb-4"} "Game Over"]
      [:div {:class "text-white text-xl mb-6"} (str "Score: " (:score @state))]
      [:button
@@ -123,7 +120,7 @@
        :on-click #(reset! state (new-game))}
       "Play Again"]]))
 
-(defn snake-game-component []
+(def snake-game-component
   (r/create-class
    {:component-did-mount
     (fn []
@@ -155,34 +152,31 @@
         [game-over-overlay]]
 
        [controls]
-       
-       [:div {:class "mt-8 text-sm text-slate-500"}
-        "Use Arrow Keys to move. Space to restart (if implemented)."]])}))
 
-(defn icon-snake []
-  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
-           :d "M19 13.5v4L15.5 21H8.5l-3.5-3.5v-4L8.5 10h7l3.5 3.5z"}] ;; Hexagon shape roughly
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
-           :d "M12 7V3m0 0l-3 3m3-3l3 3"}]]) ;; Arrow
+       [:div {:class "mt-8 text-sm text-slate-500"}
+        "Use Arrow Keys to move."]])}))
+
+;; --- Icon ---
+
+(def icon-snake
+  [:svg {:class "w-5 h-5" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2"
+           :d "M4 8h4l2-2h4l2 2h4M6 12h12M8 16h8"}]])
+
+;; --- Plugin Definition ---
 
 (def plugin
   (plin/plugin
-   {:doc "A classic Snake game for the developer tools."
+   {:doc "A classic Snake game nested under Development."
     :deps [iapp/plugin]
 
     :contributions
     {::iapp/nav-items [{:id :snake
-                        :parent-id :dev-tools
+                        :parent-id :development
                         :label "Snake"
-                        :route "snake"
+                        :description "Classic snake game"
+                        :route "/development/snake"
                         :icon icon-snake
-                        :component ::ui
-                        :order 99}]}
-
-    :beans
-    {::ui
-     ^{:doc "Main Snake UI."
-       :reagent-component true
-       :api {:args [] :ret :hiccup}}
-     [:= snake-game-component]}}))
+                        :icon-color "text-green-600 bg-green-50"
+                        :component snake-game-component
+                        :order 99}]}}))

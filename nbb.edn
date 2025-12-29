@@ -1,1 +1,1 @@
-{:paths ["src" "libs"]}
+{:paths ["src" "libs" "target"]}

@@ -65,14 +65,15 @@
 
         // --- CONFIGURATION START ---
         
-        // 1. Check URL params for mode (e.g. index.html?mode=client)
+        // 1. Check URL params for mode (e.g. index.html?mode=prod)
         const urlParams = new URLSearchParams(window.location.search);
         const urlMode = urlParams.get('mode');
 
         // 2. Default to demo if not specified
         window.APP_MODE = urlMode || "demo"; 
+        window.APP_ENV = "browser";
         
-        console.log("🚀 Starting App in mode:", window.APP_MODE);
+        console.log("🚀 Starting App in env:", window.APP_ENV, "mode:", window.APP_MODE);
         
         // 3. Fetch and Parse Manifests
         function fetchEdn(path) {
@@ -96,13 +97,44 @@
                 return [];
             }
         }
+        
+        // 4. Plugin filtering logic (NEW: uses :envs and :modes)
+        // Load if: (envs absent OR current-env in envs) AND (modes absent OR current-mode in modes)
+        function shouldLoadPlugin(plugin, env, mode) {
+            // Skip config entries
+            if (plugin.config) return false;
+            
+            // Only load CLJS plugins (or unspecified type) via script tags
+            var isCljs = !plugin.type || plugin.type === 'cljs';
+            if (!isCljs) return false;
+            
+            // Check envs: absent means "all environments"
+            var envs = plugin.envs;
+            var envMatch = !envs || envs.length === 0 || envs.indexOf(env) !== -1;
+            
+            // Check modes: absent means "all modes"
+            var modes = plugin.modes;
+            var modeMatch = !modes || modes.length === 0 || modes.indexOf(mode) !== -1;
+            
+            return envMatch && modeMatch;
+        }
+        
+        // Collect initially disabled plugin IDs
+        function getInitiallyDisabledIds(manifest) {
+            var disabled = [];
+            manifest.forEach(function(plugin) {
+                if (plugin.enabled === false && plugin.id) {
+                    disabled.push(plugin.id);
+                }
+            });
+            return disabled;
+        }
 
         // A. Load User Manifest
-        var userEdn = fetchEdn("manifest.edn");
+        var userEdn = fetchEdn("plin.edn");
         var userManifest = parseEDN(userEdn);
         
         // B. Check for Config (Opt-out of platform plugins)
-        // We look for a special entry: {:config {:include-platform? false}}
         var configEntry = userManifest.find(function(item) { return item.config; });
         var includePlatform = true;
         var headConfig = null;
@@ -110,7 +142,6 @@
             if (configEntry.config['include-platform?'] === false) {
                 includePlatform = false;
             }
-            // Extract head configuration
             headConfig = configEntry.config.head;
         }
 
@@ -118,7 +149,6 @@
         if (headConfig) {
             console.log("📦 Injecting head resources from manifest config...");
             
-            // C1. Inject blocking scripts
             if (headConfig.scripts && Array.isArray(headConfig.scripts)) {
                 headConfig.scripts.forEach(function(script) {
                     if (typeof script === 'string') {
@@ -134,7 +164,6 @@
                 });
             }
             
-            // C2. Inject stylesheets
             if (headConfig.styles && Array.isArray(headConfig.styles)) {
                 headConfig.styles.forEach(function(style) {
                     var href = typeof style === 'string' ? style : style.href;
@@ -148,14 +177,12 @@
                 });
             }
             
-            // C3. Inject inline styles
             if (headConfig['inline-styles']) {
                 var styleEl = document.createElement('style');
                 styleEl.textContent = headConfig['inline-styles'];
                 document.head.appendChild(styleEl);
             }
             
-            // C4. Configure Tailwind (if tailwind object exists)
             if (headConfig.tailwind && window.tailwind) {
                 console.log("🎨 Applying Tailwind config from manifest...");
                 window.tailwind.config = headConfig.tailwind;
@@ -165,13 +192,24 @@
         // D. Load Platform Manifest (if not opted out)
         var platformManifest = [];
         if (includePlatform) {
-            var platformEdn = fetchEdn("libs/plinpt/manifest.edn");
+            var platformEdn = fetchEdn("src/plinpt/plin.edn");
             platformManifest = parseEDN(platformEdn);
         }
 
-        // E. Merge
+        // E. Merge and store
         window.SYSTEM_MANIFEST = platformManifest.concat(userManifest);
-        console.log("📦 Loaded Plugins:", window.SYSTEM_MANIFEST.length, "(Platform: " + platformManifest.length + ")");
+        
+        // F. Calculate initially disabled plugins
+        window.INITIALLY_DISABLED_IDS = getInitiallyDisabledIds(window.SYSTEM_MANIFEST);
+        
+        // G. Filter plugins for current env/mode
+        var pluginsToLoad = window.SYSTEM_MANIFEST.filter(function(p) {
+            return shouldLoadPlugin(p, window.APP_ENV, window.APP_MODE);
+        });
+        
+        console.log("📦 Manifest total:", window.SYSTEM_MANIFEST.length, 
+                    "| Loading:", pluginsToLoad.length,
+                    "| Initially disabled:", window.INITIALLY_DISABLED_IDS.length);
 
         // --- CONFIGURATION END ---
 
@@ -187,31 +225,15 @@
         load("libs/plin/core.cljc");
         load("libs/plin/boot.cljc");
 
-        // Load Plugins Dynamically
-        var profiles = {
-            "demo": ["shared", "ui", "demo"],
-            "client": ["shared", "ui", "client"]
-        };
-        var activeTags = new Set(profiles[window.APP_MODE]);
-
-        window.SYSTEM_MANIFEST.forEach(function(plugin) {
-            // Skip config entries
-            if (plugin.config) return;
-
-            var hasTag = plugin.tags.some(function(t) { return activeTags.has(t); });
-            // Only load CLJS plugins (or unspecified type) via script tags
-            var isCljs = !plugin.type || plugin.type === 'cljs';
-            
-            if (hasTag && isCljs) {
-                // Load all files associated with this plugin
-                plugin.files.forEach(function(file) {
-                    load(file);
-                });
-            }
+        // Load Plugins Dynamically (already filtered by env/mode)
+        pluginsToLoad.forEach(function(plugin) {
+            plugin.files.forEach(function(file) {
+                load(file);
+            });
         });
 
         // Main Entry Point
-        load("client_boot.cljs");
+        load("src/plin_platform/client_boot.cljs");
     </script>
 </body>
 

@@ -1,8 +1,6 @@
 (ns showcase.cellular-automata
   (:require [reagent.core :as r]
             [plin.core :as plin]
-            [plinpt.i-devtools :as devtools]
-            [plinpt.i-app-shell :as shell]
             [plinpt.i-application :as iapp]))
 
 ;; --- Constants & Config ---
@@ -205,7 +203,12 @@
 ;; --- Components ---
 
 (defn icon-automata []
-  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+  [:svg {:class "w-5 h-5" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
+           :d "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"}]])
+
+(def icon-automata-hiccup
+  [:svg {:class "w-5 h-5" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
    [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
            :d "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"}]])
 
@@ -315,13 +318,13 @@
                  :value (- 510 speed)
                  :on-change #(swap! app-state assoc :speed (- 510 (.. % -target -value)))}]]]]]))
 
-(defn page [automata-list]
+(defn page []
   [:div {:class "p-6 max-w-5xl mx-auto"}
    [:h1 {:class "text-3xl font-bold text-slate-800 mb-2"} "Cellular Automata"]
    [:p {:class "text-slate-600 mb-6"} 
     "A showcase of different cellular automata rules running in the browser."]
    
-   [controls automata-list]
+   [controls default-automata]
    
    [:div {:class "flex justify-center overflow-auto"}
     [canvas-view]]
@@ -333,34 +336,16 @@
 
 (def plugin
   (plin/plugin
-   {:doc "Cellular Automata Showcase."
-    :deps [devtools/plugin shell/plugin iapp/plugin]
-    
-    :extensions
-    [{:key ::automata
-      :handler (plin/collect-data ::automata)
-      :doc "List of automata definitions. Schema: {:id :keyword :label string :step fn :init fn :draw-extra fn :extra-actions vector}"}]
+   {:doc "Cellular Automata Showcase nested under Development."
+    :deps [iapp/plugin]
 
     :contributions
     {::iapp/nav-items [{:id :automata
-                        :parent-id :dev-tools
+                        :parent-id :development
                         :label "Cellular Automata"
-                        :route "automata"
-                        :icon icon-automata
-                        :component ::ui
-                        :order 50}]
-     
-     ;; Contribute the built-in automata to our own extension point
-     ::automata default-automata}
-    
-    :beans
-    {;; Default empty list for the extension point (will be populated by contributions)
-     ::automata [:= []]
-     
-     ;; Route bean that injects the automata list
-     ::ui
-     ^{:doc "Cellular Automata page."
-       :reagent-component true}
-     [(fn [automata]
-        (partial page automata))
-      ::automata]}}))
+                        :description "Game of Life, HighLife, and Langton's Ant"
+                        :route "/development/automata"
+                        :icon icon-automata-hiccup
+                        :icon-color "text-purple-600 bg-purple-50"
+                        :component page
+                        :order 50}]}}))

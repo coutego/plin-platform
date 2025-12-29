@@ -30,7 +30,7 @@ node bin/create-plin-app.js my-app
 
 This command will:
 1. Create a new directory ~my-app~.
-2. Generate configuration files (~package.json~, ~nbb.edn~, ~manifest.edn~).
+2. Generate configuration files (~package.json~, ~nbb.edn~, ~plin.edn~).
 3. Create a sample plugin with a basic UI.
 4. Install dependencies automatically.
 
@@ -43,7 +43,7 @@ npm start
 
 Open [[http://localhost:8000]]. You will see the PLIN App Shell with your new plugin loaded alongside the standard platform features (Navigation, Auth, Admin, etc.).
 
-*** 3. Build for Production
+*** 3. Build for demo mode
 
 To generate a single-file HTML bundle (zero dependencies, easy deployment):
 
@@ -55,13 +55,13 @@ The output will be at ~target/index.html~.
 
 ** Configuration & Manifest
 
-The *Manifest* (~manifest.edn~) is the entry point for your application. It tells the bootstrapper which plugins to load.
+The *Manifest* (~plin.edn~) is the entry point for your application. It tells the bootstrapper which plugins to load.
 
 *** Default Behavior
 By default, the PLIN Platform loads a standard set of plugins (App Shell, Navigation, Authentication, Admin UI, etc.) *before* loading your application plugins. This allows you to start building features immediately without wiring up infrastructure.
 
 *** Opting Out (Bare Bones Mode)
-If you want full control and do *not* want the standard platform plugins loaded automatically, add a config entry to your ~manifest.edn~:
+If you want full control and do *not* want the standard platform plugins loaded automatically, add a config entry to your ~plin.edn~:
 
 #+BEGIN_SRC clojure
 [{:config {:include-platform? false}} ;; <--- Disables standard plugins
@@ -99,7 +99,7 @@ The session system uses a layered abstraction to support custom skins:
 2. *~::isession/user-actions~*: Map of callbacks (~{:login! :logout! :show-profile!}~)
 3. *~::isession/user-widget~*: Default widget (skins can use or ignore)
 
-These are also available via the nav-bar interface (~::inav/user-data~, ~::inav/user-actions~, ~::inav/user-widget~).
+These are available via the session interface (~plinpt.i-session~).
 
 *For simple skins*: Just render ~[user-widget]~.
 
@@ -117,6 +117,125 @@ These are also available via the nav-bar interface (~::inav/user-data~, ~::inav/
         [:button {:on-click login!} "Login"]))))
 #+END_SRC
 
+** Routing and Navigation
+
+The PLIN Platform provides a flexible routing and navigation system with clear separation of concerns. This section summarizes the key concepts; for comprehensive details, see ~doc/routing-and-navigation.org~.
+
+*** Three-Layer Architecture
+
+The system separates navigation into three distinct layers:
+
+1. *Navigation Structure* (~i-application~): Defines WHAT pages exist and how they are organized
+2. *Routing* (~i-router~, ~p-hash-router~): Handles URL changes and determines WHICH page to show
+3. *Shell Rendering* (~i-app-shell~, ~p-app-shell~): Controls HOW the UI is displayed
+
+*** Nav Items: The Building Blocks
+
+Pages are registered via *nav-items*, which are maps describing navigable locations:
+
+#+BEGIN_SRC clojure
+{:id :dashboard
+ :label "Dashboard"
+ :description "Main dashboard view"
+ :route "dashboard"           ;; URL segment (relative to parent)
+ :icon [:svg {...}]           ;; Hiccup SVG for the icon
+ :icon-color "text-blue-600 bg-blue-50"
+ :component dashboard-page    ;; Reagent component to render
+ :parent-id :admin            ;; Optional: for nested navigation
+ :required-perm :perm/admin   ;; Optional: permission required
+ :order 1                     ;; Sort order (lower = first)
+ :extra {...}}                ;; Optional: application-specific data
+#+END_SRC
+
+Plugins contribute nav-items via the ~::iapp/nav-items~ extension:
+
+#+BEGIN_SRC clojure
+:contributions
+{::iapp/nav-items [{:id :my-feature
+                    :label "My Feature"
+                    :route "my-feature"
+                    :component my-page
+                    :order 10}]}
+#+END_SRC
+
+*** The ~:extra~ Field
+
+The ~:extra~ field allows applications to attach arbitrary metadata to nav-items. This is useful for:
+
+- Custom sidebar renderers that need additional styling or behavior hints
+- Feature flags or conditional rendering logic
+- Analytics tracking data
+- Custom shell implementations that need app-specific information
+
+#+BEGIN_SRC clojure
+{:id :reports
+ :label "Reports"
+ :route "reports"
+ :component reports-page
+ :extra {:sidebar-style :compact      ;; Custom rendering hint
+         :badge-count 5               ;; Show notification badge
+         :feature-flag :beta-reports  ;; Feature gating
+         :analytics-id "nav-reports"  ;; Tracking
+         :custom-renderer my-renderer ;; Custom component for sidebar
+         }}
+#+END_SRC
+
+The platform's default shell and sidebar implementations pass through the ~:extra~ field unchanged, allowing custom shells to access and use this data as needed.
+
+*** Hierarchical Navigation
+
+Nav items can be nested using ~:parent-id~:
+
+#+BEGIN_SRC clojure
+;; Root section (no component = auto-generated parent page)
+{:id :settings
+ :label "Settings"
+ :route "/settings"
+ :icon settings-icon
+ :order 100}
+
+;; Child items
+{:id :profile
+ :parent-id :settings
+ :label "Profile"
+ :route "profile"
+ :component profile-page
+ :order 1}
+#+END_SRC
+
+This creates:
+- ~/settings~ - Parent page (auto-generated with cards linking to children)
+- ~/settings/profile~ - Profile page
+
+*** Key Beans for Custom Shells
+
+When building custom shells, these beans are essential:
+
+| Bean                        | Purpose                              |
+|-----------------------------|--------------------------------------|
+| ~::iapp/structure~          | Navigation tree (hierarchical)       |
+| ~::irouter/current-route~   | Current route (reactive atom)        |
+| ~::irouter/navigate!~       | Navigation function                  |
+| ~::irouter/setup!~          | Router initialization                |
+| ~::iauth/can?~              | Permission checking                  |
+| ~::isession/user-data~      | User info for UI                     |
+| ~::isession/user-actions~   | Login/logout callbacks               |
+| ~::iapp/overlay-components~ | Global overlays                      |
+| ~::iapp/homepage~           | Homepage configuration               |
+
+*** Customization Levels
+
+1. *Adding Pages*: Contribute nav-items with components
+2. *Adding Overlays*: Contribute to ~::iapp/overlay-components~
+3. *Customizing Homepage*: Override ~::iapp/homepage~
+4. *Customizing Metadata*: Override ~::iapp/name~, ~::iapp/logo~, etc.
+5. *Replacing the Shell*: Override ~::iapp/ui~ with your own layout
+6. *Replacing the Router*: Override ~::irouter/*~ beans for different routing strategies
+
+*** Further Information
+
+For detailed architecture documentation, including complete examples of custom shells and routers, see ~doc/routing-and-navigation.org~.
+
 ** Architecture
 
 This repository is organized to separate the "Platform" code from "User" code.
@@ -129,13 +248,32 @@ This repository is organized to separate the "Platform" code from "User" code.
 
 - *~nbb.edn~*: Configuration for nbb (Node Babashka) - specifies source paths for the ClojureScript runtime.
 - *~package.json~*: npm package configuration with dependencies and scripts.
-- *~manifest.edn~*: Plugin manifest that defines which plugins to load.
+- *~plin.edn~*: Plugin manifest that defines which plugins to load.
 
 *** How It Works
 
-When you use PLIN as an npm dependency, the server (~plin-platform.server~) acts as a virtual file server:
-1. It serves framework files (~libs/...~) from the installed ~node_modules/plin-platform~ location.
-2. It serves your project files (~src/...~, ~manifest.edn~) from your current working directory.
+**** Client (Browser)
+The browser loads ~public/index.html~, which:
+1. Fetches and parses the manifest (~plin.edn~)
+2. Dynamically loads script tags for each plugin file
+3. Bootstraps the application via ~client_boot.cljs~
+
+**** Server (Node.js / nbb)
+The server uses a two-phase approach because ~nbb~ cannot dynamically require namespaces:
+
+1. *Generation Phase*: ~bin/generate-server-boot.js~ reads the manifest and generates ~target/server_boot_generated.cljs~ with hardcoded requires for all server plugins.
+2. *Execution Phase*: ~nbb~ runs the generated file, which has all necessary namespaces statically required.
+
+When you run ~npm start~, both phases happen automatically.
+
+*** Development vs Production
+
+| Command | Description |
+|---------|-------------|
+| ~npm start~ | Generates boot file and starts server (recommended) |
+| ~npm run start:dev~ | Uses static server_boot.cljs (for framework development) |
+| ~npm run generate-boot~ | Only generates the boot file without running |
+| ~npm run build~ | Creates single-file HTML bundle |
 
 ** Tutorial: Creating Your First Plugin
 
@@ -147,8 +285,7 @@ Create a new file at ~src/showcase/hello.cljs~:
 #+BEGIN_SRC clojure
 (ns showcase.hello
   (:require [plin.core :as plin]
-            [plinpt.i-nav-bar :as nav]   ;; We want to add a menu item
-            [plinpt.i-app-shell :as shell])) ;; We want to register a route
+            [plinpt.i-application :as iapp])) ;; Central interface for app structure
 
 ;; 1. Define the UI Component
 (defn hello-page []
@@ -161,30 +298,46 @@ Create a new file at ~src/showcase/hello.cljs~:
   (plin/plugin
    {:doc "My first custom plugin."
     ;; Declare dependencies on the interfaces we use
-    :deps [nav/plugin shell/plugin]
+    :deps [iapp/plugin]
 
     ;; Contribute to extensions defined by other plugins
     :contributions
-    {;; Add a link to the Navigation Bar
-     ::nav/items [{:label "Hello" :route "/hello" :order 1}]
-     
-     ;; Register the Route
-     ::shell/routes [{:path "/hello" :component hello-page}]}
+    {;; Add a link to the Navigation Bar using the Bean Constructor Pattern
+     ::iapp/nav-items [::nav-item]}
 
-    ;; Define internal beans (optional)
-    :beans {}}))
+    ;; Define beans (internal components)
+    :beans
+    {;; The page component bean
+     ::ui
+     ^{:doc "Hello page component."
+       :reagent-component true}
+     [:= hello-page]
+
+     ;; The navigation item bean (uses constructor pattern for dependency injection)
+     ::nav-item
+     ^{:doc "Navigation item with injected component"}
+     {:constructor [(fn [ui]
+                      {:id :hello
+                       :label "Hello"
+                       :route "hello"
+                       :icon [:svg {:class "h-5 w-5" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
+                              [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
+                                      :d "M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"}]]
+                       :component ui
+                       :order 1})
+                    ::ui]}}}))
 #+END_SRC
 
 *** Step 2: Test with Dynamic Loader (Optional)
 Before registering the plugin permanently, you can test it live without restarting the server.
 
 1.  Open the application in your browser.
-2.  Navigate to *Dev Tools* (Wrench icon) -> *Dynamic Loader*.
+2.  Navigate to *Development* -> *Dynamic Loader*.
 3.  Upload your ~src/showcase/hello.cljs~ file.
-4.  The system will compile the file, reload the container, and your "Hello" link should appear in the navigation bar immediately.
+4.  The system will compile the file, reload the container, and your "Hello" link should appear in the sidebar immediately.
 
 *** Step 3: Register in Manifest
-To make the plugin permanent, open ~manifest.edn~ (in your project root) and add your new plugin to the vector.
+To make the plugin permanent, open ~plin.edn~ (in your project root) and add your new plugin to the vector.
 *Note*: Ensure you add the ~:ui~ tag so it loads in the browser.
 
 #+BEGIN_SRC clojure
@@ -198,208 +351,21 @@ To make the plugin permanent, open ~manifest.edn~ (in your project root) and add
 #+END_SRC
 
 *** Step 4: Reload
-Refresh your browser. You should see a "Hello" link in the navigation bar, which leads to your new page.
+Refresh your browser. You should see a "Hello" link in the sidebar, which leads to your new page.
 
 ** More Examples
 
-*** Example 1: Replacing the App Shell (Custom Skin)
+The examples below demonstrate various PLIN Platform features. You can test any of these examples *without modifying the manifest* by using the Dynamic Plugin Loader:
 
-This tutorial demonstrates the power of Dependency Injection. We will replace the entire application layout (App Shell) with a completely different implementation, without changing any other part of the system and loading and unloading it live.
+1. Open the application in your browser
+2. Navigate to *Development* -> *Dynamic Loader*
+3. Copy the example code into a ~.cljs~ file
+4. Upload the file using the loader interface
+5. The plugin will be compiled and loaded immediately
 
-The key feature here is using ~::isession/user-data~ and ~::isession/user-actions~ to build a custom user widget that matches the skin's theme, rather than using the default ~::inav/user-widget~.
+This allows rapid prototyping and experimentation before committing changes to your manifest.
 
-**** Step 1: Create the Plugin File
-Create a new file at ~src/showcase/fancy_shell.cljs~. This plugin implements the ~i-app-shell~ interface but provides a completely different UI.
-
-#+BEGIN_SRC clojure
-(ns showcase.fancy-shell
-  (:require [reagent.core :as r]
-            [clojure.string :as str]
-            [plin.core :as plin]
-            [plinpt.i-app-shell :as iapp]
-            [plinpt.i-authorization :as iauth]
-            [plinpt.i-breadcrumb :as ibread]
-            [plinpt.i-nav-bar :as inav]
-            [plinpt.i-session :as isession]))
-
-;; --- Router Logic ---
-
-(defonce current-route (r/atom nil))
-
-(defn- match-route [route-defs path]
-  (let [clean-path (if (or (str/blank? path) (= path "#")) "/" (str/replace path #"^#" ""))]
-    (or (some (fn [def]
-                (let [def-path (:path def)]
-                  (if (and def-path (str/includes? def-path ":"))
-                    (let [path-parts (str/split clean-path #"/")
-                          def-parts (str/split def-path #"/")]
-                      (when (= (count path-parts) (count def-parts))
-                        (when (every? (fn [[p d]] (or (= p d) (str/starts-with? d ":")))
-                                      (map vector path-parts def-parts))
-                          def)))
-                    (when (= def-path clean-path) def))))
-              route-defs)
-        nil)))
-
-(defn- handle-hash-change [routes]
-  (let [hash (.-hash js/location)]
-    (reset! current-route (match-route routes hash))))
-
-;; --- State ---
-
-(defonce shell-state (r/atom {:collapsed? false}))
-
-;; --- Components ---
-
-(defn icon-chevron-left []
-  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M15 19l-7-7 7-7"}]])
-
-(defn icon-chevron-right []
-  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M9 5l7 7-7 7"}]])
-
-(defn nav-item [item collapsed? current-route]
-  (let [active? (= (:route item) (:path current-route))
-        label (:label item)
-        initial (when (seq label) (subs label 0 1))]
-    [:a {:href (str "#" (:route item))
-         :class (str "flex items-center gap-3 p-3 rounded-xl transition-all duration-200 mb-1 group "
-                     (if active?
-                       "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
-                       "text-slate-400 hover:bg-white/5 hover:text-white"))
-         :title (when collapsed? label)}
-     
-     [:div {:class (str "w-6 h-6 flex items-center justify-center flex-shrink-0 transition-colors "
-                        (if active? "text-cyan-400" "text-slate-500 group-hover:text-white"))}
-      (if (:icon item)
-        [(:icon item)]
-        [:span {:class "font-bold text-lg uppercase"} initial])]
-     
-     [:span {:class (str "font-medium truncate transition-all duration-300 "
-                         (if collapsed? "w-0 opacity-0" "w-auto opacity-100"))}
-      label]]))
-
-;; Custom user widget for this skin using user-data and user-actions
-(defn custom-user-widget [user-data user-actions collapsed?]
-  (let [{:keys [logged? name initials]} @user-data
-        {:keys [login! logout!]} user-actions]
-    (if logged?
-      [:div {:class "flex items-center gap-3"}
-       [:div {:class "w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg"}
-        initials]
-       (when-not collapsed?
-         [:div {:class "flex-1 min-w-0"}
-          [:p {:class "text-sm font-medium text-white truncate"} name]
-          [:button {:class "text-xs text-cyan-400 hover:text-cyan-300"
-                    :on-click logout!}
-           "Sign out"]])]
-      [:button {:class (str "w-full py-2 px-4 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium hover:from-cyan-400 hover:to-blue-500 transition-all "
-                            (if collapsed? "text-xs" "text-sm"))
-                :on-click login!}
-       (if collapsed? "→" "Log in")])))
-
-(defn sidebar [items user-data user-actions collapsed?]
-  [:aside {:class (str "bg-black/20 backdrop-blur-lg border-r border-white/10 flex flex-col transition-all duration-300 z-20 "
-                       (if collapsed? "w-20" "w-72"))}
-   
-   [:div {:class "h-20 flex items-center justify-between px-0 border-b border-white/5 relative"}
-    [:div {:class (str "flex items-center gap-3 px-6 transition-opacity duration-300 "
-                       (if collapsed? "opacity-0 pointer-events-none" "opacity-100"))}
-     [:div {:class "w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold"} "P"]
-     [:h1 {:class "text-xl font-black tracking-tighter text-white whitespace-nowrap"} "PLIN OS"]]
-    
-    [:button {:class "absolute right-0 top-0 h-full w-12 flex items-center justify-center text-slate-500 hover:text-white transition-colors"
-              :on-click #(swap! shell-state update :collapsed? not)}
-     (if collapsed? [icon-chevron-right] [icon-chevron-left])]]
-
-   [:nav {:class "flex-1 px-3 py-6 overflow-y-auto overflow-x-hidden scrollbar-hide"}
-    (when-not collapsed?
-      [:div {:class "px-3 text-xs font-bold text-slate-600 uppercase tracking-wider mb-4"} "Menu"])
-    
-    (doall
-     (for [item (sort-by :order items)]
-       ^{:key (:route item)}
-       [nav-item item collapsed? @current-route]))]
-
-   [:div {:class "p-4 border-t border-white/10 bg-black/20 min-h-[80px] flex items-center justify-center overflow-hidden"}
-    [:div {:class (str "transition-all duration-300 "
-                       (if collapsed? "scale-75" "scale-100 w-full"))}
-     [custom-user-widget user-data user-actions collapsed?]]]])
-
-(defn fancy-layout [routes overlays can? user-atom breadcrumb nav-items user-data user-actions]
-  (let [hash-handler #(handle-hash-change routes)]
-    (set! (.-onhashchange js/window) hash-handler)
-    (handle-hash-change routes)
-    
-    (fn []
-      (let [active-route @current-route
-            Page (:component active-route)
-            collapsed? (:collapsed? @shell-state)]
-        [:div {:class "min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white font-sans flex overflow-hidden"}
-         
-         [sidebar nav-items user-data user-actions collapsed?]
-
-         [:main {:class "flex-1 flex flex-col h-screen overflow-hidden relative"}
-          [:div {:class "absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0"}
-           [:div {:class "absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"}]
-           [:div {:class "absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"}]]
-
-          [:header {:class "h-20 flex-shrink-0 flex items-center justify-between px-8 z-10"}
-           [:div {:class "flex items-center gap-4"}
-            (when breadcrumb 
-              [:div {:class "bg-white/5 px-4 py-2 rounded-full border border-white/10 backdrop-blur-sm"}
-               [breadcrumb]])]
-           [:div {:class "flex gap-4"}]]
-
-          [:div {:class "flex-1 overflow-auto px-8 pb-8 z-10"}
-           [:div {:class "bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 min-h-full shadow-2xl relative overflow-hidden"}
-            (cond
-              (not Page) 
-              [:div {:class "flex flex-col items-center justify-center h-full text-slate-400"}
-               [:div {:class "text-6xl mb-4 font-thin"} "404"]
-               [:div "Destination Unknown"]]
-              
-              (and (:required-perm active-route) (not (can? (:required-perm active-route))))
-              [:div {:class "flex flex-col items-center justify-center h-full text-red-400"}
-               [:div {:class "text-6xl mb-4 font-thin"} "403"]
-               [:div "Access Restricted"]]
-              
-              :else [Page])]]]
-
-         (for [[idx comp] (map-indexed vector overlays)]
-           ^{:key idx} [comp])]))))
-
-(def plugin
-  (plin/plugin
-   {:doc "A fancy, dark-themed replacement for the App Shell using user-data/user-actions pattern."
-    :deps [iapp/plugin iauth/plugin ibread/plugin inav/plugin isession/plugin]
-    
-    :beans
-    {::iapp/ui
-     ^{:doc "Fancy App Shell UI."
-       :reagent-component true
-       :api {:args [] :ret :hiccup}}
-     [partial fancy-layout
-      ::iapp/routes
-      ::iapp/overlay-components
-      ::iauth/can?
-      ::iauth/user
-      ::ibread/ui
-      ::inav/items
-      ::isession/user-data
-      ::isession/user-actions]}}))
-#+END_SRC
-
-**** Step 2: Test with Dynamic Loader
-1.  Open the application in your browser.
-2.  Navigate to *Dev Tools* -> *Dynamic Loader*.
-3.  Upload ~src/showcase/fancy_shell.cljs~.
-4.  *Result*: The entire application UI transforms instantly to a dark, modern theme with a collapsible sidebar. The navigation items and user widget are preserved but rendered differently.
-
-This works because both the default shell and this fancy shell implement the same interface (~i-app-shell~) and consume the same beans (~::inav/items~, ~::iauth/user~). The fancy shell uses ~::isession/user-data~ and ~::isession/user-actions~ to build a custom user widget that matches its dark theme.
-
-*** Example 2: Global Command Palette
+*** Example 1: Global Command Palette
 
 This example demonstrates how to create a global overlay component (triggered by keyboard shortcuts) that interacts with the routing system. It features fuzzy search and keyboard navigation.
 
@@ -411,7 +377,7 @@ Create ~src/showcase/command_palette.cljs~:
   (:require [reagent.core :as r]
             [clojure.string :as str]
             [plin.core :as plin]
-            [plinpt.i-app-shell :as iapp]))
+            [plinpt.i-application :as iapp]))
 
 ;; --- State ---
 
@@ -533,7 +499,7 @@ Create ~src/showcase/command_palette.cljs~:
       (fn []
         (let [handler (fn [e]
                         (when (and (or (.-ctrlKey e) (.-metaKey e))
-                                   (= (.-key e) "k"))
+                                   (= (str/lower-case (.-key e)) "k"))
                           (.preventDefault e)
                           (toggle!)))]
           (reset! listener-fn handler)
@@ -547,6 +513,8 @@ Create ~src/showcase/command_palette.cljs~:
       :component-did-update
       (fn []
         (when (:open? @state)
+          (when-let [el (.getElementById js/document "cmd-palette-input")]
+            (.focus el))
           (when-let [el (.getElementById js/document "cmd-palette-selected")]
             (.scrollIntoView el #js {:block "nearest"}))))
 
@@ -580,11 +548,14 @@ Create ~src/showcase/command_palette.cljs~:
      ^{:doc "The Command Palette Overlay Component."
        :reagent-component true
        :api {:args [] :ret :hiccup}}
-     [partial palette-component ::iapp/routes]}}))
+     [partial palette-component ::iapp/all-routes]}}))
 #+END_SRC
 
-**** Step 2: Register in Manifest
-Add to ~manifest.edn~:
+**** Step 2: Test with Dynamic Loader
+You can test this immediately using the Dynamic Loader (*Development* -> *Dynamic Loader*). Upload the file and press ~Ctrl+K~ or ~Cmd+K~ to open the palette.
+
+**** Step 3: Register in Manifest (Optional)
+To make the plugin permanent, add to ~plin.edn~:
 
 #+BEGIN_SRC clojure
 {:id :showcase-command-palette
@@ -593,109 +564,4 @@ Add to ~manifest.edn~:
  :entry "showcase.command-palette"}
 #+END_SRC
 
-**** Step 3: Test
-Reload the app and press ~Ctrl+K~ or ~Cmd+K~.
-
-*** Example 3: Zen Mode
-
-This example shows how to inject global styles and UI elements to create a "Zen Mode" that hides the sidebar and header for distraction-free viewing.
-
-**** Step 1: Create the Plugin File
-Create ~src/showcase/zen_mode.cljs~:
-
-#+BEGIN_SRC clojure
-(ns showcase.zen-mode
-  (:require [reagent.core :as r]
-            [plin.core :as plin]
-            [plinpt.i-app-shell :as iapp]))
-
-(defonce zen? (r/atom false))
-
-(defn toggle-zen! []
-  (swap! zen? not)
-  (if @zen?
-    (.-add (.-classList js/document.body) "zen-mode")
-    (.-remove (.-classList js/document.body) "zen-mode")))
-
-(defn zen-style []
-  [:style
-   "
-   /* Hide Header (Top Bar) */
-   header { display: none !important; }
-
-   /* Hide Sidebar */
-   aside { display: none !important; }
-   
-   /* Hide Breadcrumbs if they are in a separate container or nav */
-   .breadcrumb-container, nav[aria-label='Breadcrumb'] { display: none !important; }
-   
-   /* Force Main content to be full width */
-   main { 
-      width: 100% !important; 
-      max-width: 100% !important; 
-      margin: 0 !important;
-      padding-left: 2rem !important;
-      padding-right: 2rem !important;
-   }
-   "])
-
-(defn icon-leaf []
-  [:svg {:class "w-5 h-5" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
-           :d "M12 19l9 2-9-18-9 18 9-2zm0 0v-8"}]])
-
-(defn header-button []
-  [:button {:class (str "p-2 rounded-full transition-all duration-300 "
-                        (if @zen? 
-                          "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] rotate-180" 
-                          "text-slate-400 hover:text-white hover:bg-white/10"))
-            :on-click toggle-zen!
-            :title "Enter Zen Mode"}
-   [icon-leaf]])
-
-(defn floating-overlay []
-  (when @zen?
-    [:div
-     [zen-style]
-     [:div {:class "fixed bottom-6 right-6 z-50 animate-in fade-in zoom-in duration-300"}
-      [:button {:class "p-4 rounded-full bg-emerald-500 text-white shadow-lg hover:bg-emerald-600 hover:scale-110 transition-all duration-200"
-                :on-click toggle-zen!
-                :title "Exit Zen Mode"}
-       [icon-leaf]]]]))
-
-(def plugin
-  (plin/plugin
-   {:doc "Zen Mode Toggle Plugin."
-    :deps [iapp/plugin]
-    
-    :contributions
-    {::iapp/header-components [::header-btn]
-     ::iapp/overlay-components [::floating-overlay]}
-    
-    :beans
-    {::header-btn
-     ^{:doc "Zen Mode Toggle Button (Header)."
-       :reagent-component true
-       :api {:args [] :ret :hiccup}}
-     [:= header-button]
-
-     ::floating-overlay
-     ^{:doc "Zen Mode Overlay (Style + Floating Button)."
-       :reagent-component true
-       :api {:args [] :ret :hiccup}}
-     [:= floating-overlay]}}))
-#+END_SRC
-
-**** Step 2: Register in Manifest
-Add to ~manifest.edn~:
-
-#+BEGIN_SRC clojure
-{:id :showcase-zen-mode
- :tags [:ui]
- :files ["src/showcase/zen_mode.cljs"]
- :entry "showcase.zen-mode"}
-#+END_SRC
-
-**** Step 3: Test
-Reload the app. You will see a leaf icon in the header. Clicking it enters Zen Mode, hiding the UI. A floating button appears in the bottom right to exit Zen Mode.
-
+*** Example 2: Zen Mode

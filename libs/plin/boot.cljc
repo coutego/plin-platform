@@ -1,42 +1,55 @@
 (ns plin.boot
-  "A standard bootstrapper for Plin applications.
+  "A minimal, platform-agnostic bootstrapper for Plin applications.
    
-   Supports:
-   - nbb (Node.js Babashka)
-   - scittle (Browser interpretation)
-   - cljs (Compiled ClojureScript)
-   - clj (JVM Clojure)"
+   This module is responsible for:
+   1. Receiving a list of plugins
+   2. Creating the DI container
+   3. Extracting and calling the ::boot-fn bean
+   
+   It knows NOTHING about Reagent, DOM, HTTP servers, etc.
+   All platform-specific behavior is delegated to plugins."
   (:require 
    [plin.core :as pi]
    [promesa.core :as p]
-   ;; Atom implementation selection:
-   ;; - nbb/clj: Standard atom
-   ;; - scittle/cljs: Reagent atom (for UI reactivity)
-   #?(:nbb     [cljs.core :as r]
-      :scittle [reagent.core :as r]
-      :clj     [clojure.core :as r]
-      :cljs    [reagent.core :as r])))
+   [clojure.string :as str]))
 
-;; --- Platform Helpers ---
+;; --- Helpers ---
 
 (defn- log [& args]
   #?(:clj (apply println args)
      :default (apply js/console.log args)))
 
-(defn- log-error [e]
-  #?(:clj (println "ERROR:" e)
-     :default (js/console.error e)))
+(defn- log-error [& args]
+  #?(:clj (apply println "ERROR:" args)
+     :default (apply js/console.error args)))
+
+(defn- manifest-id->plugin-id
+  "Converts a manifest ID (e.g., :plinpt.p-devdoc) to a plugin ID (e.g., :plinpt.p-devdoc/plugin).
+   If the ID already ends with /plugin, returns it unchanged."
+  [manifest-id]
+  (when (keyword? manifest-id)
+    (let [ns-part (namespace manifest-id)
+          name-part (name manifest-id)]
+      (if (and ns-part (= "plugin" name-part))
+        ;; Already in plugin ID format (e.g., :plinpt.p-devdoc/plugin)
+        manifest-id
+        ;; Convert manifest ID to plugin ID format
+        ;; :plinpt.p-devdoc -> :plinpt.p-devdoc/plugin
+        (keyword name-part "plugin")))))
+
+(defn- normalize-disabled-ids
+  "Normalizes a set of disabled IDs from manifest format to plugin ID format."
+  [disabled-ids]
+  (set (keep manifest-id->plugin-id disabled-ids)))
 
 ;; --- State ---
+;; Atom holding the system state. Accessible to plugins via ::api bean.
 
-(defonce ^:private state 
-  ;; Reagent atom (Browser) or Standard atom (Server) holding the system state.
-  ;; PRIVATE: Do not access this directly from other namespaces.
-  ;; Use the ::api bean if you need access to the system state.
-  (r/atom {:all-plugins []
-           :disabled-ids #{}
-           :container nil
-           :last-error nil}))
+(defonce state 
+  (atom {:all-plugins []
+         :disabled-ids #{}
+         :container nil
+         :last-error nil}))
 
 ;; --- Logic ---
 
@@ -61,15 +74,12 @@
 
 (defn- update-plugin-list [plugins new-plugin]
   (let [target-id (:id new-plugin)
-        ;; Find index of existing plugin with same ID
         idx (reduce-kv (fn [_ i p] 
                          (if (= (:id p) target-id) (reduced i) nil)) 
                        nil 
                        plugins)]
     (if idx
-      ;; Replace existing plugin to preserve order/dependencies
       (assoc plugins idx new-plugin)
-      ;; Append new plugin
       (conj plugins new-plugin))))
 
 (defn register-plugin!
@@ -79,10 +89,36 @@
   (swap! state update :all-plugins update-plugin-list plugin-def)
   (reload!))
 
+(defn enable-plugin!
+  "Enables a plugin by removing it from disabled-ids and reloading.
+   Returns a Promise."
+  [plugin-id]
+  (swap! state update :disabled-ids disj plugin-id)
+  (reload!))
+
+(defn disable-plugin!
+  "Disables a plugin by adding it to disabled-ids and reloading.
+   Returns a Promise."
+  [plugin-id]
+  (swap! state update :disabled-ids conj plugin-id)
+  (reload!))
+
+(defn toggle-plugin!
+  "Toggles a plugin's enabled state and reloads.
+   Returns a Promise."
+  [plugin-id]
+  (let [currently-disabled? (contains? (:disabled-ids @state) plugin-id)]
+    (if currently-disabled?
+      (enable-plugin! plugin-id)
+      (disable-plugin! plugin-id))))
+
 ;; --- Plugin Definition ---
 
 (def plugin
-  "The Bootstrapper Plugin."
+  "The Bootstrapper Plugin.
+   
+   Defines the `::boot-fn` bean which should be overridden by platform-specific
+   plugins to provide post-bootstrap behavior (e.g., mount UI, start server)."
   (pi/plugin
    {:doc "System Bootstrapper. Manages the plugin lifecycle and system state."
     :deps []
@@ -90,33 +126,41 @@
     :beans
     {::api
      ^{:doc "System Control API.
-             This is a function that returns a map: `{:state <atom> :reload! <fn> :register-plugin! <fn>}`."
+             Returns a map with state atom and control functions."
        :api {:ret :map}}
      [(fn [] {:state state
               :reload! reload!
-              :register-plugin! register-plugin!})]}}))
+              :register-plugin! register-plugin!
+              :enable-plugin! enable-plugin!
+              :disable-plugin! disable-plugin!
+              :toggle-plugin! toggle-plugin!})]
+     
+     ::boot-fn
+     ^{:doc "Function called after the container is created.
+             Receives the container as argument.
+             Override this in platform-specific plugins to mount UI, start servers, etc.
+             Default: no-op that just logs."
+       :api {:args [["container" {} :map]] :ret :any}}
+     [:= (fn [_container] 
+           (log "Boot complete. No ::boot-fn override provided."))]}}))
 
 ;; --- Reload Implementation ---
 
 (defn reload!
   "Reloads the system based on the current state.
 
-   1.  Calculates the active plugins (filtering out disabled ones).
-   2.  Calls `plin.core/load-plugins` to create a new container.
-   3.  Looks for a mount function in the container (specifically `:plinpt.p-app-shell/mount`).
-   4.  Updates the `state` atom with the new container.
-   5.  Executes the mount function to render the app.
+   1. Calculates the active plugins (filtering out disabled ones).
+   2. Calls `plin.core/load-plugins` to create a new container.
+   3. Extracts `::boot-fn` from the container and calls it.
+   4. Updates the `state` atom with the new container.
 
    Returns a Promise that resolves to the state."
   []
-  ;; Use p/delay to yield execution (equivalent to setTimeout 0)
-  ;; This allows UI to render in browser or event loop to tick in Node
   (-> (p/delay 0)
       (p/then (fn [_]
                 (log "System: Reloading...")
                 (try
                   (let [{:keys [all-plugins disabled-ids]} @state
-
                         ;; Calculate which plugins to actually load
                         final-disabled (get-cascading-disabled all-plugins disabled-ids)
                         plugins-to-load (filter #(not (contains? final-disabled (:id %))) all-plugins)
@@ -124,14 +168,15 @@
                         ;; Create Container
                         container (pi/load-plugins (vec plugins-to-load))
 
-                        ;; Resolve the mount function.
-                        mount-fn (:plinpt.p-app-shell/mount container)]
+                        ;; Get the boot function from the container
+                        boot-fn (::boot-fn container)]
 
                     ;; Update State
                     (swap! state assoc :container container :last-error nil)
 
-                    ;; Mount App (if applicable in this environment)
-                    (when mount-fn (mount-fn))
+                    ;; Call the boot function with the container
+                    (when boot-fn
+                      (boot-fn container))
 
                     (log "System: Reload complete. Active plugins:" (count plugins-to-load))
                     @state)
@@ -143,7 +188,26 @@
 ;; --- Bootstrap ---
 
 (defn bootstrap! 
-  [plugins]
-  (let [full-list (conj (vec plugins) plugin)]
-    (swap! state assoc :all-plugins full-list)
-    (reload!)))
+  "Bootstraps the system with the given plugins.
+   
+   Arguments:
+   - plugins: Vector of plugin definitions
+   - initially-disabled-ids: (Optional) Set of plugin IDs to start disabled
+                             These can be in manifest format (e.g., :plinpt.p-devdoc)
+                             and will be normalized to plugin ID format (e.g., :plinpt.p-devdoc/plugin)
+   
+   Adds the boot plugin itself to the list, then calls reload!.
+   Returns a Promise that resolves to the state."
+  ([plugins]
+   (bootstrap! plugins #{}))
+  ([plugins initially-disabled-ids]
+   (let [full-list (conj (vec plugins) plugin)
+         disabled-set (if (set? initially-disabled-ids)
+                        initially-disabled-ids
+                        (set initially-disabled-ids))
+         ;; Normalize the disabled IDs to match plugin ID format
+         normalized-disabled (normalize-disabled-ids disabled-set)]
+     (swap! state assoc 
+            :all-plugins full-list
+            :disabled-ids normalized-disabled)
+     (reload!))))

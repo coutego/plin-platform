@@ -2,7 +2,8 @@
   (:require [reagent.core :as r]
             [clojure.string :as str]
             [plin.core :as plin]
-            [plinpt.i-application :as iapp]))
+            [plinpt.i-application :as iapp]
+            [plinpt.i-router :as irouter]))
 
 ;; --- State ---
 
@@ -158,13 +159,13 @@
           (.scrollIntoView el #js {:block "nearest"}))))
 
     :reagent-render
-    (fn [routes]
+    (fn []
       [palette-ui routes])}))
 
 (def plugin
   (plin/plugin
    {:doc "A global command palette triggered by Ctrl+K / Cmd+K."
-    :deps [iapp/plugin]
+    :deps [iapp/plugin irouter/plugin]
 
     :contributions
     {::iapp/overlay-components [::ui]}
@@ -174,4 +175,4 @@
      ^{:doc "The Command Palette Overlay Component."
        :reagent-component true
        :api {:args [] :ret :hiccup}}
-     [(fn [routes] (partial palette-component routes)) ::iapp/all-routes]}}))
+     [(fn [routes] (partial palette-component routes)) ::irouter/all-routes]}}))

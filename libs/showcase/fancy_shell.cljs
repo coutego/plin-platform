@@ -2,10 +2,10 @@
   (:require [reagent.core :as r]
             [clojure.string :as str]
             [plin.core :as plin]
-            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-app-shell :as iapp-shell]
             [plinpt.i-authorization :as iauth]
             [plinpt.i-breadcrumb :as ibread]
-            [plinpt.i-application :as iapp-core]
+            [plinpt.i-application :as iapp]
             [plinpt.i-session :as isession]))
 
 ;; --- Router Logic ---
@@ -159,18 +159,19 @@
 (def plugin
   (plin/plugin
    {:doc "A fancy, dark-themed replacement for the App Shell using user-data/user-actions pattern."
-    :deps [iapp/plugin iauth/plugin ibread/plugin iapp-core/plugin isession/plugin]
+    :deps [iapp-shell/plugin iauth/plugin ibread/plugin iapp/plugin isession/plugin]
     
     :beans
-    {::iapp/ui
+    {::iapp-shell/ui
      ^{:doc "Fancy App Shell UI."
-       :reagent-component true}
+       :reagent-component true
+       :api {:args [] :ret :hiccup}}
      [partial fancy-layout
-      ::iapp/routes
+      ::iapp/all-routes
       ::iapp/overlay-components
       ::iauth/can?
       ::iauth/user
       ::ibread/ui
-      ::iapp-core/nav-items
+      ::iapp/nav-items
       ::isession/user-data
       ::isession/user-actions]}}))

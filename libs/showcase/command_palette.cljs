@@ -2,7 +2,7 @@
   (:require [reagent.core :as r]
             [clojure.string :as str]
             [plin.core :as plin]
-            [plinpt.i-app-shell :as iapp]))
+            [plinpt.i-application :as iapp]))
 
 ;; --- State ---
 
@@ -57,6 +57,20 @@
       "Escape"    (close!)
       nil)))
 
+;; --- Global Keyboard Listener ---
+;; Set up once when the namespace loads
+
+(defonce _keyboard-listener
+  (do
+    (js/window.addEventListener 
+     "keydown" 
+     (fn [e]
+       (when (and (or (.-ctrlKey e) (.-metaKey e))
+                  (= (str/lower-case (.-key e)) "k"))
+         (.preventDefault e)
+         (toggle!))))
+    true))
+
 ;; --- Sub-Components ---
 
 (defn search-input [query filtered selected-index]
@@ -82,25 +96,23 @@
            :on-click #(navigate! route)
            :on-mouse-move #(when-not selected?
                              (swap! state assoc :selected-index idx))}
-     
+
      [:div {:class "flex items-center gap-3"}
-      [:svg {:class (str "w-4 h-4 " (if selected? "text-blue-200" "text-slate-500")) 
+      [:svg {:class (str "w-4 h-4 " (if selected? "text-blue-200" "text-slate-500"))
              :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
        [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M13 7l5 5m0 0l-5 5m5-5H6"}]]
-      
+
       [:span {:class "font-mono text-sm"} (:path route)]]
-     
+
      (when selected?
        [:span {:class "text-xs text-blue-200 font-bold opacity-75"} "⏎"])]))
 
 (defn results-list [filtered selected-index]
   (if (empty? filtered)
-    [:div {:class "p-8 text-center text-slate-500"} 
+    [:div {:class "p-8 text-center text-slate-500"}
      [:div "No matching routes found."]]
-    
-    ;; Added [&::-webkit-scrollbar]:hidden to hide scrollbar in WebKit
-    ;; Added style for Firefox/IE
-    [:div {:class "max-h-[60vh] overflow-y-auto py-2 scroll-smooth [&::-webkit-scrollbar]:hidden"
+
+    [:div {:class "max-h-[60vh] overflow-y-auto py-2 scroll-smooth"
            :style {:scrollbar-width "none" :ms-overflow-style "none"}}
      (doall
       (for [[idx route] (map-indexed vector filtered)]
@@ -117,58 +129,49 @@
 
 ;; --- Main Component ---
 
+(defn palette-ui [routes]
+  (let [{:keys [open? query selected-index]} @state
+        filtered (filter-routes routes query)]
+    
+    (when open?
+      [:div {:class "fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] font-sans"}
+       ;; Backdrop
+       [:div {:class "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+              :on-click close!}]
+
+       ;; Modal
+       [:div {:class "relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col"}
+        [search-input query filtered selected-index]
+        [results-list filtered selected-index]
+        [palette-footer]]])))
+
 (defn palette-component [routes]
-  (let [listener-fn (atom nil)]
-    (r/create-class
-     {:component-did-mount
-      (fn []
-        (let [handler (fn [e]
-                        (when (and (or (.-ctrlKey e) (.-metaKey e))
-                                   (= (.-key e) "k"))
-                          (.preventDefault e)
-                          (toggle!)))]
-          (reset! listener-fn handler)
-          (js/window.addEventListener "keydown" handler)))
+  (r/create-class
+   {:component-did-update
+    (fn []
+      (when (:open? @state)
+        ;; Focus the input when opened
+        (when-let [el (.getElementById js/document "cmd-palette-input")]
+          (.focus el))
+        ;; Scroll selected item into view
+        (when-let [el (.getElementById js/document "cmd-palette-selected")]
+          (.scrollIntoView el #js {:block "nearest"}))))
 
-      :component-will-unmount
-      (fn []
-        (when @listener-fn
-          (js/window.removeEventListener "keydown" @listener-fn)))
-
-      :component-did-update
-      (fn []
-        (when (:open? @state)
-          (when-let [el (.getElementById js/document "cmd-palette-selected")]
-            (.scrollIntoView el #js {:block "nearest"}))))
-      
-      :reagent-render
-      (fn []
-        (let [{:keys [open? query selected-index]} @state
-              filtered (filter-routes routes query)]
-
-          (when open?
-            [:div {:class "fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] font-sans"}
-             ;; Backdrop
-             [:div {:class "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-                    :on-click close!}]
-
-             ;; Modal
-             [:div {:class "relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"}
-              [search-input query filtered selected-index]
-              [results-list filtered selected-index]
-              [palette-footer]]])))})))
+    :reagent-render
+    (fn [routes]
+      [palette-ui routes])}))
 
 (def plugin
   (plin/plugin
    {:doc "A global command palette triggered by Ctrl+K / Cmd+K."
     :deps [iapp/plugin]
-    
+
     :contributions
     {::iapp/overlay-components [::ui]}
-    
+
     :beans
     {::ui
      ^{:doc "The Command Palette Overlay Component."
        :reagent-component true
        :api {:args [] :ret :hiccup}}
-     [partial palette-component ::iapp/routes]}}))
+     [(fn [routes] (partial palette-component routes)) ::iapp/all-routes]}}))

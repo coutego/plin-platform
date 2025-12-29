@@ -1,10 +1,10 @@
 {
   "name": "plin-platform",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Pluggable & Injectable Platform for ClojureScript",
   "main": "src/plin_platform/server.cljs",
   "bin": {
-    "create-plin-app": "./bin/create-plin-app.js"
+    "create-plin-app": "bin/create-plin-app.js"
   },
   "files": [
     "src",
@@ -33,6 +33,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/coutego/plin-platform.git"
+    "url": "git+https://github.com/coutego/plin-platform.git"
   }
 }

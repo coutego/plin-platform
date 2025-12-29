@@ -131,10 +131,10 @@ const CommandPalette = ({ routes }) => {
 // Return the Plugin Definition
 return {
     doc: "Command Palette (JS Implementation)",
-    deps: ["plinpt.i-app-shell"],
+    deps: ["plinpt.i-application"],
     
     contributions: {
-        "plinpt.i-app-shell/overlay-components": [
+        "plinpt.i-application/overlay-components": [
             "ui"
         ]
     },
@@ -146,7 +146,7 @@ return {
             value: CommandPalette,
             // Inject routes into the 'routes' prop
             deps: [
-                { ref: "plinpt.i-app-shell/routes", prop: "routes" }
+                { ref: "plinpt.i-application/all-routes", prop: "routes" }
             ]
         }
     }

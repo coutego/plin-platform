@@ -1,7 +1,7 @@
 (ns showcase.zen-mode
   (:require [reagent.core :as r]
             [plin.core :as plin]
-            [plinpt.i-app-shell :as iapp]))
+            [plinpt.i-application :as iapp]))
 
 (defonce zen? (r/atom false))
 

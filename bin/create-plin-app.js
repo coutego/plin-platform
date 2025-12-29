@@ -35,7 +35,7 @@ async function main() {
       version: '0.1.0',
       private: true,
       dependencies: {
-        "plin-platform": "^0.1.0",
+        "plin-platform": "^0.2.0",
         "nbb": "^1.3.205",
         "react": "^18.2.0"
       },
@@ -68,27 +68,32 @@ async function main() {
     // 5. Create Source File
     const coreCljs = `(ns ${appName}.core
   (:require [plin.core :as plin]
-            [plinpt.i-nav-bar :as nav]
-            [plinpt.i-app-shell :as shell]))
+            [plinpt.i-application :as iapp]))
 
 ;; 1. Define a UI Component
 (defn hello-page []
   [:div {:class "p-10"}
    [:h1 {:class "text-3xl font-bold text-blue-600"} "Hello! Welcome to ${appName}"]
-   [:p {:class "mt-4"} "Built with PLIN Platform."]])
+   [:p {:class "mt-4 text-gray-600"} "Built with PLIN Platform."]
+   [:p {:class "mt-2 text-sm text-gray-500"} "Edit src/${appName.replace(/-/g, '_')}/core.cljs to get started."]])
 
 ;; 2. Define the Plugin
 (def plugin
   (plin/plugin
    {:doc "My Application Hello Plugin"
-    :deps [nav/plugin shell/plugin]
+    :deps [iapp/plugin]
     
     :contributions
-    {;; Add a link to the Navigation Bar
-     ::nav/items [{:label "Hello" :route "/hello" :order 1}]
-     
-     ;; Register the Route
-     ::shell/routes [{:path "/hello" :component hello-page}]}}))
+    {;; Register navigation item and route
+     ::iapp/nav-items [{:id :hello
+                        :label "Hello"
+                        :description "Welcome page for ${appName}"
+                        :route "/hello"
+                        :icon [:svg {:class "h-5 w-5" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
+                               [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" 
+                                       :d "M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"}]]
+                        :component hello-page
+                        :order 1}]}}))
 `;
 
     fs.writeFileSync(path.join(srcDir, 'core.cljs'), coreCljs);

@@ -2,22 +2,23 @@
   (:require [reagent.core :as r]
             [clojure.string :as str]
             [plin.core :as plin]
-            [plinpt.i-devtools :as idev]
+            [plinpt.i-application :as iapp]
             [plinpt.i-homepage :as ihome]
-            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-app-shell :as iapp-shell]
             [plinpt.i-devdoc :as idevdoc]
             [plinpt.p-devtools.core :as core]))
+
+(def icon-tools
+  [:svg {:class "h-5 w-5 sidebar-icon" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"}]])
 
 (def plugin
   (plin/plugin
    {:doc "Implementation plugin providing developer tools page and integration with home features."
-    :deps [idev/plugin ihome/plugin iapp/plugin idevdoc/plugin]
+    :deps [ihome/plugin iapp/plugin idevdoc/plugin iapp-shell/plugin]
 
     :contributions
-    {;; Inject route into app shell
-     ::iapp/routes [::route]
-
-     ;; Add link to home page
+    {;; Add link to home page
      ::ihome/features [{:title "Development"
                         :description "Tools for developers"
                         :icon core/icon-tools
@@ -25,13 +26,14 @@
                         :href "/development"
                         :order 100}]
      
-     ;; Add Tracer to DevTools
-     ::idev/items [{:title "Service Tracer"
-                    :description "Trace service calls and SQL execution."
-                    :icon core/icon-search
-                    :color-class "bg-blue-600"
-                    :href "/tracer"
-                    :order 20}]
+     ;; Register Development Section in Sidebar (root level)
+     ::iapp/nav-items [{:id :development
+                        :label "Development"
+                        :description "Tools for developers."
+                        :route "/development"
+                        :icon icon-tools
+                        :icon-color "text-gray-700 bg-gray-100"
+                        :order 200}]
      
      ::idevdoc/plugins [{:id :devtools
                          :description "Developer Tools Implementation."
@@ -39,11 +41,11 @@
                          :type :infrastructure}]}
 
     :beans
-    {::idev/ui
+    {::ui
      ^{:doc "Developer tools page component implementation."
        :reagent-component true}
-     [partial core/create-dev-tools-page ::idev/items]
+     [partial core/create-dev-tools-page []] ;; Empty items list as we moved to sidebar
 
      ::route
      ^{:doc "Route definition for dev tools page"}
-     [core/make-route ::idev/ui]}}))
+     [core/make-route ::ui]}}))

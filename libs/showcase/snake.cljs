@@ -1,6 +1,7 @@
 (ns showcase.snake
   (:require [plin.core :as plin]
             [reagent.core :as r]
+            [plinpt.i-application :as iapp]
             [plinpt.i-devtools :as idev]
             [plinpt.i-app-shell :as shell]))
 
@@ -168,20 +169,16 @@
 (def plugin
   (plin/plugin
    {:doc "A classic Snake game for the developer tools."
-    :deps [idev/plugin shell/plugin]
+    :deps [iapp/plugin]
 
     :contributions
-    {::idev/items
-     [{:title "Snake Game"
-       :description "Procrastinate with a classic snake game."
-       :icon icon-snake
-       :href "/snake"
-       :color-class "text-green-500"
-       :order 99}]
-
-     ::shell/routes
-     [{:path "/snake"
-       :component snake-game-component}]}
+    {::iapp/nav-items [{:id :snake
+                        :parent-id :dev-tools
+                        :label "Snake"
+                        :route "snake"
+                        :icon icon-snake
+                        :component ::ui
+                        :order 99}]}
 
     :beans
     {::ui

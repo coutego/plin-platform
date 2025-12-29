@@ -30,7 +30,7 @@ const ReactIcon = () => {
 // Define plugin
 const pluginDef = {
     doc: "A sample plugin written in JS",
-    deps: ["plinpt.i-app-shell", "plinpt.i-devtools"],
+    deps: ["plinpt.i-application", "plinpt.i-devtools"],
     
     contributions: {
         "plinpt.i-devtools/items": [
@@ -43,7 +43,7 @@ const pluginDef = {
                 order: 10
             }
         ],
-        "plinpt.i-app-shell/routes": [
+        "plinpt.i-application/routes": [
             { path: "/hello-react", component: "hello-page" }
         ]
     },

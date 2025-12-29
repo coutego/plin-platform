@@ -1,7 +1,8 @@
 [{:id :plinpt.i-devdoc :tags [:shared] :files ["libs/plinpt/i_devdoc.cljs"] :entry "plinpt.i-devdoc"}
+ {:id :plinpt.i-application :tags [:ui :shared] :files ["libs/plinpt/i_application.cljs"] :entry "plinpt.i-application"}
+ {:id :plinpt.i-sidebar :tags [:ui :shared] :files ["libs/plinpt/i_sidebar.cljs"] :entry "plinpt.i-sidebar"}
  {:id :plinpt.i-head-config :tags [:shared] :files ["libs/plinpt/i_head_config.cljs"] :entry "plinpt.i-head-config"}
  {:id :plinpt.i-app-shell :tags [:shared] :files ["libs/plinpt/i_app_shell.cljs"] :entry "plinpt.i-app-shell"}
- {:id :plinpt.i-nav-bar :tags [:shared] :files ["libs/plinpt/i_nav_bar.cljs"] :entry "plinpt.i-nav-bar"}
  {:id :plinpt.i-breadcrumb :tags [:shared] :files ["libs/plinpt/i_breadcrumb.cljs"] :entry "plinpt.i-breadcrumb"}
  {:id :plinpt.i-homepage :tags [:shared] :files ["libs/plinpt/i_homepage.cljs"] :entry "plinpt.i-homepage"}
  {:id :plinpt.i-session :tags [:shared] :files ["libs/plinpt/i_session.cljs"] :entry "plinpt.i-session"}
@@ -20,7 +21,7 @@
  ;; Implementations (UI / Demo)
  {:id :plinpt.p-head-config :tags [:ui] :files ["libs/plinpt/p_head_config/core.cljs" "libs/plinpt/p_head_config.cljs"] :entry "plinpt.p-head-config"}
  {:id :plinpt.p-app-shell :tags [:ui] :files ["libs/plinpt/p_app_shell/doc.cljs" "libs/plinpt/p_app_shell/core.cljs" "libs/plinpt/p_app_shell.cljs"] :entry "plinpt.p-app-shell"}
- {:id :plinpt.p-nav-bar :tags [:ui] :files ["libs/plinpt/p_nav_bar/core.cljs" "libs/plinpt/p_nav_bar.cljs"] :entry "plinpt.p-nav-bar"}
+ {:id :plinpt.p-sidebar :tags [:ui] :files ["libs/plinpt/p_sidebar/core.cljs" "libs/plinpt/p_sidebar.cljs"] :entry "plinpt.p-sidebar"}
  {:id :plinpt.p-breadcrumb :tags [:ui] :files ["libs/plinpt/p_breadcrumb/core.cljs" "libs/plinpt/p_breadcrumb.cljs"] :entry "plinpt.p-breadcrumb"}
  {:id :plinpt.p-homepage :tags [:ui] :files ["libs/plinpt/p_homepage/core.cljs" "libs/plinpt/p_homepage.cljs"] :entry "plinpt.p-homepage"}
  {:id :plinpt.p-session :tags [:ui] :files ["libs/plinpt/p_session/utils.cljs" "libs/plinpt/p_session/service.cljc" "libs/plinpt/p_session/core.cljs" "libs/plinpt/p_session.cljs"] :entry "plinpt.p-session"}

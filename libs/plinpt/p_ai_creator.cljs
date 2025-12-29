@@ -1,7 +1,7 @@
 (ns plinpt.p-ai-creator
   (:require [plin.core :as plin]
             [plin.boot :as boot]
-            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-application :as iapp]
             [plinpt.i-devtools :as devtools]
             [plinpt.p-ai-creator.ui :as ui]))
 

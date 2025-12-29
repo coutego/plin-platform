@@ -80,6 +80,20 @@
              ;; Success State
              (into [:<>] children))))})))
 
+;; --- Helper to render icon ---
+
+(defn render-icon [icon]
+  "Renders an icon which can be either hiccup data or a component function."
+  (cond
+    ;; nil - no icon
+    (nil? icon) nil
+    ;; Already hiccup (vector starting with keyword)
+    (and (vector? icon) (keyword? (first icon))) icon
+    ;; Component function - call it
+    (fn? icon) [icon]
+    ;; Fallback - try to render as-is
+    :else icon))
+
 ;; --- Main Component ---
 
 (defn default-guest-view []
@@ -100,7 +114,7 @@
          [:span {:class "block xl:inline"} "Welcome to "]
          [:span {:class "block text-blue-600 xl:inline"} "PLIN Demo"]]
         [:p {:class "mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl"}
-         "A reference implementation of a modular Single Page Application (SPA) built using the Plin architecture."]])
+         "A reference implementation of a modular Single Page Application (SPA) built using the PLIN architecture."]])
       
      (if logged-in?
        [:div
@@ -126,12 +140,13 @@
           (for [[idx feature] (map-indexed vector visible-features)]
             ^{:key idx}
             [:div {:class "pt-6"}
-             (let [content [:div {:class "flow-root bg-gray-50 rounded-lg px-6 pb-8 h-full"}
+             (let [icon-element (render-icon (:icon feature))
+                   content [:div {:class "flow-root bg-gray-50 rounded-lg px-6 pb-8 h-full"}
                             [:div {:class "-mt-6"}
                              [:div {:class (str "inline-flex items-center justify-center p-3 rounded-md shadow-lg " 
                                                 (or (:color-class feature) "bg-blue-500"))}
-                              (if (:icon feature)
-                                [error-boundary {:compact true} [(:icon feature)]]
+                              (if icon-element
+                                [error-boundary {:compact true} icon-element]
                                 ;; Default icon if none provided
                                 [:svg {:class "h-6 w-6 text-white" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
                                  [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M13 10V3L4 14h7v7l9-11h-7z"}]])]

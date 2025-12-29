@@ -2,7 +2,7 @@
   (:require [reagent.core :as r]
             [plin.core :as plin]
             [plinpt.i-devtools :as idev]
-            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-application :as iapp]
             [plinpt.i-devdoc :as idevdoc]
             [plinpt.p-alasql-explorer.core :as core]))
 

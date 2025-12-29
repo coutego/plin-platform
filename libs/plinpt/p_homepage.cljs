@@ -4,7 +4,7 @@
             [plin.core :as plin]
             [plinpt.i-homepage :as ihome]
             [plinpt.i-authorization :as iauth]
-            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-application :as iapp]
             [plinpt.i-devdoc :as idev]
             [plinpt.p-homepage.core :as core]))
 

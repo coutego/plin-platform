@@ -5,22 +5,29 @@
             [plinpt.i-admin :as admin]
             [plinpt.i-ui-components :as ui]
             [plinpt.i-devtools :as devtools]
-            [plinpt.i-app-shell :as app-shell]
+            [plinpt.i-application :as iapp]
             [plinpt.i-homepage :as homepage]
             [plinpt.i-devdoc :as idev]
             [plinpt.i-service-authorization :as iservice]
             [plinpt.p-admin-authorization.core :as core]))
 
+(def icon-lock
+  [:svg {:class "h-5 w-5 sidebar-icon" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"}]])
+
 (def plugin
   (plin/plugin
    {:doc "Implementation plugin for authorization management in the admin interface, providing pages, routes, and debug tools."
-    :deps [session/plugin admin/plugin ui/plugin devtools/plugin iadmin-auth/plugin homepage/plugin iservice/plugin app-shell/plugin idev/plugin]
+    :deps [session/plugin admin/plugin ui/plugin devtools/plugin iadmin-auth/plugin homepage/plugin iservice/plugin iapp/plugin idev/plugin]
 
     :contributions
     {;; Register route
-     ::app-shell/routes [::iadmin-auth/route]
+     ::iapp/routes [::iadmin-auth/route]
 
-     ;; Register admin section
+     ;; Authorization as child of Admin (Admin root is registered by p_admin.cljs)
+     ::iapp/nav-items [::nav-item]
+
+     ;; Register admin section (for admin page grid)
      ::admin/sections [{:id :authorization
                         :label "Authorization"
                         :description "Manage users and permissions."
@@ -31,7 +38,7 @@
      ;; Register home feature
      ::homepage/features [{:title "Authorization"
                            :description "Manage users, groups, roles and permissions."
-                           :icon core/icon-lock
+                           :icon icon-lock
                            :color-class "bg-red-500"
                            :href "/admin/authorization"
                            :order 10
@@ -80,4 +87,19 @@
                       {:title "User Permissions"
                        :description "Inspect current user roles and permissions."
                        :component comp})
-                    ::iadmin-auth/debugger-component]}}}))
+                    ::iadmin-auth/debugger-component]}
+      
+     ::nav-item
+     ^{:doc "Nav item with injected component"}
+     {:constructor [(fn [page]
+                      {:id :authorization
+                       :parent-id :admin
+                       :label "Authorization"
+                       :description "Manage users, groups, roles and permissions."
+                       :route "authorization"
+                       :icon icon-lock
+                       :icon-color "text-red-600 bg-red-50"
+                       :component page
+                       :order 1
+                       :required-perm :perm/admin})
+                    ::iadmin-auth/page]}}}))

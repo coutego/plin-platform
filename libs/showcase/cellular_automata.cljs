@@ -2,7 +2,8 @@
   (:require [reagent.core :as r]
             [plin.core :as plin]
             [plinpt.i-devtools :as devtools]
-            [plinpt.i-app-shell :as shell]))
+            [plinpt.i-app-shell :as shell]
+            [plinpt.i-application :as iapp]))
 
 ;; --- Constants & Config ---
 
@@ -333,7 +334,7 @@
 (def plugin
   (plin/plugin
    {:doc "Cellular Automata Showcase."
-    :deps [devtools/plugin shell/plugin]
+    :deps [devtools/plugin shell/plugin iapp/plugin]
     
     :extensions
     [{:key ::automata
@@ -341,28 +342,25 @@
       :doc "List of automata definitions. Schema: {:id :keyword :label string :step fn :init fn :draw-extra fn :extra-actions vector}"}]
 
     :contributions
-    {::devtools/items [{:title "Cellular Automata"
-                        :description "Game of Life, HighLife, and Langton's Ant."
+    {::iapp/nav-items [{:id :automata
+                        :parent-id :dev-tools
+                        :label "Cellular Automata"
+                        :route "automata"
                         :icon icon-automata
-                        :color-class "bg-indigo-500"
-                        :href "/showcase/automata"
+                        :component ::ui
                         :order 50}]
      
      ;; Contribute the built-in automata to our own extension point
-     ::automata default-automata
-     
-     ;; Register the route, injecting the collected automata list
-     ::shell/routes [::route]}
+     ::automata default-automata}
     
     :beans
     {;; Default empty list for the extension point (will be populated by contributions)
      ::automata [:= []]
      
      ;; Route bean that injects the automata list
-     ::route
-     ^{:doc "Route definition for Cellular Automata page."
-       :api {:ret :map}}
+     ::ui
+     ^{:doc "Cellular Automata page."
+       :reagent-component true}
      [(fn [automata]
-        {:path "/showcase/automata"
-         :component (partial page automata)})
+        (partial page automata))
       ::automata]}}))

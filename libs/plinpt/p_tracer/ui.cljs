@@ -63,7 +63,7 @@
             ^{:key ep}
             [:label.flex.items-center.space-x-2.cursor-pointer
              [:input {:type "checkbox"
-                      :checked (or (empty? active-endpoints) (contains? active-endpoints ep))
+                      :checked (contains? active-endpoints ep)
                       :on-change #(core/toggle-endpoint! ep)
                       :class "rounded text-blue-600 focus:ring-blue-500"}]
              [:span.text-sm.truncate {:title ep} ep]])])]

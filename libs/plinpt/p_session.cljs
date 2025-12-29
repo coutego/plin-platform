@@ -3,7 +3,6 @@
             [plin.core :as plin]
             [plinpt.i-session :as isession]
             [plinpt.i-authorization :as iauth]
-            [plinpt.i-nav-bar :as inav]
             [plinpt.i-app-shell :as iapp]
             [plinpt.i-devdoc :as idev]
             [plinpt.i-service-authorization :as iservice]
@@ -14,7 +13,7 @@
 (def plugin
   (plin/plugin
     {:doc "Implementation plugin providing session management, user authentication, and UI components for login and user widget."
-     :deps [isession/plugin iauth/plugin inav/plugin iapp/plugin iservice/plugin invoker/plugin idev/plugin]
+     :deps [isession/plugin iauth/plugin iapp/plugin iservice/plugin invoker/plugin idev/plugin]
 
      :beans
      {;; -- Session User Data (reactive, for UI consumption) --
@@ -106,14 +105,7 @@
       [(fn [inv] (utils/make-service inv :permissions)) ::invoker/invoke]}
 
      :contributions
-     {;; Register the default user widget with the nav bar
-      ::inav/user-widget [identity ::isession/user-widget]
-
-      ;; Also register user-data and user-actions for skins that want to build custom widgets
-      ::inav/user-data [identity ::isession/user-data]
-      ::inav/user-actions [identity ::isession/user-actions]
-
-      ;; Mount the login modal via header-components
+     {;; Mount the login modal via header-components
       ::iapp/header-components [identity ::isession/login-modal]
       
       ::idev/plugins [{:id :session

@@ -5,7 +5,8 @@
             [plinpt.i-app-shell :as iapp]
             [plinpt.i-authorization :as iauth]
             [plinpt.i-breadcrumb :as ibread]
-            [plinpt.i-nav-bar :as inav]))
+            [plinpt.i-application :as iapp-core]
+            [plinpt.i-session :as isession]))
 
 ;; --- Router Logic ---
 
@@ -160,18 +161,17 @@
 (def plugin
   (plin/plugin
    {:doc "A fancy, dark-themed replacement for the App Shell (v2)."
-    :deps [iapp/plugin iauth/plugin ibread/plugin inav/plugin]
+    :deps [iapp/plugin iauth/plugin ibread/plugin iapp-core/plugin isession/plugin]
     
     :beans
     {::iapp/ui
      ^{:doc "Fancy App Shell UI v2."
-       :reagent-component true
-       :api {:args [] :ret :hiccup}}
+       :reagent-component true}
      [partial fancy-layout-2
       ::iapp/routes
       ::iapp/overlay-components
       ::iauth/can?
       ::iauth/user
       ::ibread/ui
-      ::inav/items
-      ::inav/user-widget]}}))
+      ::iapp-core/nav-items
+      ::isession/user-widget]}}))

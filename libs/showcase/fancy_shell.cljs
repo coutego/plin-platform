@@ -4,7 +4,9 @@
             [plin.core :as plin]
             [plinpt.i-app-shell :as iapp]
             [plinpt.i-authorization :as iauth]
-            [plinpt.i-breadcrumb :as ibread]))
+            [plinpt.i-breadcrumb :as ibread]
+            [plinpt.i-application :as iapp-core]
+            [plinpt.i-session :as isession]))
 
 ;; --- Router Logic ---
 
@@ -29,14 +31,89 @@
   (let [hash (.-hash js/location)]
     (reset! current-route (match-route routes hash))))
 
+;; --- State ---
+
+(defonce shell-state (r/atom {:collapsed? false}))
+
 ;; --- Components ---
 
-(defn nav-item-wrapper [child]
-  [:div {:class "mb-2 p-2 rounded hover:bg-white/10 transition-colors duration-200"}
-   child])
+(defn icon-chevron-left []
+  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M15 19l-7-7 7-7"}]])
 
-(defn fancy-layout [header routes overlays can? user-atom breadcrumb]
-  ;; Setup Router
+(defn icon-chevron-right []
+  [:svg {:class "w-6 h-6" :fill "none" :stroke "currentColor" :viewBox "0 0 24 24"}
+   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M9 5l7 7-7 7"}]])
+
+(defn nav-item [item collapsed? current-route]
+  (let [active? (= (:route item) (:path current-route))
+        label (:label item)
+        initial (when (seq label) (subs label 0 1))]
+    [:a {:href (str "#" (:route item))
+         :class (str "flex items-center gap-3 p-3 rounded-xl transition-all duration-200 mb-1 group "
+                     (if active?
+                       "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                       "text-slate-400 hover:bg-white/5 hover:text-white"))
+         :title (when collapsed? label)}
+     
+     [:div {:class (str "w-6 h-6 flex items-center justify-center flex-shrink-0 transition-colors "
+                        (if active? "text-cyan-400" "text-slate-500 group-hover:text-white"))}
+      (if (:icon item)
+        [(:icon item)]
+        [:span {:class "font-bold text-lg uppercase"} initial])]
+     
+     [:span {:class (str "font-medium truncate transition-all duration-300 "
+                         (if collapsed? "w-0 opacity-0" "w-auto opacity-100"))}
+      label]]))
+
+;; Custom user widget for this skin using user-data and user-actions
+(defn custom-user-widget [user-data user-actions collapsed?]
+  (let [{:keys [logged? name initials]} @user-data
+        {:keys [login! logout!]} user-actions]
+    (if logged?
+      [:div {:class "flex items-center gap-3"}
+       [:div {:class "w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg"}
+        initials]
+       (when-not collapsed?
+         [:div {:class "flex-1 min-w-0"}
+          [:p {:class "text-sm font-medium text-white truncate"} name]
+          [:button {:class "text-xs text-cyan-400 hover:text-cyan-300"
+                    :on-click logout!}
+           "Sign out"]])]
+      [:button {:class (str "w-full py-2 px-4 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium hover:from-cyan-400 hover:to-blue-500 transition-all "
+                            (if collapsed? "text-xs" "text-sm"))
+                :on-click login!}
+       (if collapsed? "→" "Log in")])))
+
+(defn sidebar [items user-data user-actions collapsed?]
+  [:aside {:class (str "bg-black/20 backdrop-blur-lg border-r border-white/10 flex flex-col transition-all duration-300 z-20 "
+                       (if collapsed? "w-20" "w-72"))}
+   
+   [:div {:class "h-20 flex items-center justify-between px-0 border-b border-white/5 relative"}
+    [:div {:class (str "flex items-center gap-3 px-6 transition-opacity duration-300 "
+                       (if collapsed? "opacity-0 pointer-events-none" "opacity-100"))}
+     [:div {:class "w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold"} "P"]
+     [:h1 {:class "text-xl font-black tracking-tighter text-white whitespace-nowrap"} "PLIN OS"]]
+    
+    [:button {:class "absolute right-0 top-0 h-full w-12 flex items-center justify-center text-slate-500 hover:text-white transition-colors"
+              :on-click #(swap! shell-state update :collapsed? not)}
+     (if collapsed? [icon-chevron-right] [icon-chevron-left])]]
+
+   [:nav {:class "flex-1 px-3 py-6 overflow-y-auto overflow-x-hidden scrollbar-hide"}
+    (when-not collapsed?
+      [:div {:class "px-3 text-xs font-bold text-slate-600 uppercase tracking-wider mb-4"} "Menu"])
+    
+    (doall
+     (for [item (sort-by :order items)]
+       ^{:key (:route item)}
+       [nav-item item collapsed? @current-route]))]
+
+   [:div {:class "p-4 border-t border-white/10 bg-black/20 min-h-[80px] flex items-center justify-center overflow-hidden"}
+    [:div {:class (str "transition-all duration-300 "
+                       (if collapsed? "scale-75" "scale-100 w-full"))}
+     [custom-user-widget user-data user-actions collapsed?]]]])
+
+(defn fancy-layout [routes overlays can? user-atom breadcrumb nav-items user-data user-actions]
   (let [hash-handler #(handle-hash-change routes)]
     (set! (.-onhashchange js/window) hash-handler)
     (handle-hash-change routes)
@@ -44,79 +121,56 @@
     (fn []
       (let [active-route @current-route
             Page (:component active-route)
-            user @user-atom]
-        [:div {:class "min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white font-sans flex"}
+            collapsed? (:collapsed? @shell-state)]
+        [:div {:class "min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white font-sans flex overflow-hidden"}
          
-         ;; Sidebar
-         [:aside {:class "w-72 bg-black/20 backdrop-blur-lg border-r border-white/10 flex flex-col"}
-          [:div {:class "p-8"}
-           [:h1 {:class "text-3xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500"}
-            "PLIN OS"]]
-          
-          [:nav {:class "flex-1 px-6 py-4 overflow-y-auto"}
-           [:div {:class "text-xs font-bold text-slate-500 uppercase tracking-wider mb-4"} "Menu"]
-           (for [[idx comp] (map-indexed vector header)]
-             ^{:key idx} [nav-item-wrapper [comp]])]
-          
-          [:div {:class "p-6 border-t border-white/10 bg-black/20"}
-           [:div {:class "flex items-center gap-3"}
-            [:div {:class "w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-violet-500 flex items-center justify-center font-bold"}
-             (if user (subs (str (:name user)) 0 1) "?")]
-            [:div
-             [:div {:class "font-medium"} (if user (:name user) "Guest")]
-             [:div {:class "text-xs text-slate-400"} (if user "Online" "Offline")]]]]]
+         [sidebar nav-items user-data user-actions collapsed?]
 
-         ;; Main Area
          [:main {:class "flex-1 flex flex-col h-screen overflow-hidden relative"}
-          ;; Decorative background elements
           [:div {:class "absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0"}
            [:div {:class "absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"}]
            [:div {:class "absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"}]]
 
-          ;; Top Bar
-          [:header {:class "h-20 flex items-center justify-between px-10 z-10"}
+          [:header {:class "h-20 flex-shrink-0 flex items-center justify-between px-8 z-10"}
            [:div {:class "flex items-center gap-4"}
             (when breadcrumb 
-              [:div {:class "bg-white/5 px-4 py-2 rounded-full border border-white/10"}
+              [:div {:class "bg-white/5 px-4 py-2 rounded-full border border-white/10 backdrop-blur-sm"}
                [breadcrumb]])]
-           [:div {:class "flex gap-4"}
-            ;; Could put extra actions here
-            ]]
+           [:div {:class "flex gap-4"}]]
 
-          ;; Content
-          [:div {:class "flex-1 overflow-auto px-10 pb-10 z-10"}
-           [:div {:class "bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 min-h-full shadow-2xl"}
+          [:div {:class "flex-1 overflow-auto px-8 pb-8 z-10"}
+           [:div {:class "bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 min-h-full shadow-2xl relative overflow-hidden"}
             (cond
               (not Page) 
-              [:div {:class "flex flex-col items-center justify-center h-64 text-slate-400"}
-               [:div {:class "text-6xl mb-4"} "404"]
+              [:div {:class "flex flex-col items-center justify-center h-full text-slate-400"}
+               [:div {:class "text-6xl mb-4 font-thin"} "404"]
                [:div "Destination Unknown"]]
               
               (and (:required-perm active-route) (not (can? (:required-perm active-route))))
-              [:div {:class "flex flex-col items-center justify-center h-64 text-red-400"}
-               [:div {:class "text-6xl mb-4"} "403"]
+              [:div {:class "flex flex-col items-center justify-center h-full text-red-400"}
+               [:div {:class "text-6xl mb-4 font-thin"} "403"]
                [:div "Access Restricted"]]
               
               :else [Page])]]]
 
-         ;; Overlays
          (for [[idx comp] (map-indexed vector overlays)]
            ^{:key idx} [comp])]))))
 
 (def plugin
   (plin/plugin
-   {:doc "A fancy, dark-themed replacement for the App Shell."
-    :deps [iapp/plugin iauth/plugin ibread/plugin]
+   {:doc "A fancy, dark-themed replacement for the App Shell using user-data/user-actions pattern."
+    :deps [iapp/plugin iauth/plugin ibread/plugin iapp-core/plugin isession/plugin]
     
     :beans
     {::iapp/ui
      ^{:doc "Fancy App Shell UI."
-       :reagent-component true
-       :api {:args [] :ret :hiccup}}
+       :reagent-component true}
      [partial fancy-layout
-      ::iapp/header-components
       ::iapp/routes
       ::iapp/overlay-components
       ::iauth/can?
       ::iauth/user
-      ::ibread/ui]}}))
+      ::ibread/ui
+      ::iapp-core/nav-items
+      ::isession/user-data
+      ::isession/user-actions]}}))

@@ -2,36 +2,37 @@
   (:require [plin.core :as plin]
             [plin.boot :as boot]
             [plinpt.i-dynamic-loader :as i-loader]
-            [plinpt.i-app-shell :as app-shell]
-            [plinpt.i-devtools :as devtools]
+            [plinpt.i-application :as iapp]
             [plinpt.p-dynamic-loader.core :as core]))
 
 (def plugin
   (plin/plugin
    {:doc "Implementation of Dynamic Plugin Loader."
-    :deps [i-loader/plugin app-shell/plugin devtools/plugin boot/plugin]
+    :deps [i-loader/plugin iapp/plugin boot/plugin]
     
     :contributions
-    {;; We contribute the ::route bean.
-     ;; We wrap it in a vector because the extension handler (collect-all) expects a sequence of items.
-     ::app-shell/routes [::route]
-     
-     ::devtools/items [{:title "Dynamic Loader"
-                        :description "Load .cljs plugin files at runtime."
-                        :icon core/icon-upload
-                        :color-class "bg-green-600"
-                        :href "/development/loader"
-                        :order 100}]}
+    {::iapp/nav-items [::nav-item]}
 
     :beans
-    {;; We define a bean for the route so we can inject the boot API.
-     ;; The route component needs the API to register new plugins.
-     ::route
-     ^{:doc "Route for the dynamic loader, with dependencies injected."
-       :api {:args [["sys-api" {} :map]] :ret :map}}
+    {::ui
+     ^{:doc "Dynamic loader page component."
+       :reagent-component true}
      [(fn [sys-api handlers]
-        {:path "/development/loader"
-         ;; We use partial to inject the API into the UI component
-         :component (partial core/loader-page sys-api handlers)})
+        (partial core/loader-page sys-api handlers))
       ::boot/api
-      ::i-loader/handlers]}}))
+      ::i-loader/handlers]
+     
+     ::nav-item
+     ^{:doc "Nav item with injected component"}
+     {:constructor [(fn [ui]
+                      {:id :loader
+                       :parent-id :development
+                       :label "Dynamic Loader"
+                       :description "Load plugins dynamically at runtime."
+                       :route "loader"
+                       :icon [:svg {:class "h-5 w-5 sidebar-icon" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
+                              [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"}]]
+                       :icon-color "text-cyan-600 bg-cyan-50"
+                       :component ui
+                       :order 100})
+                    ::ui]}}}))

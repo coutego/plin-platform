@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [plin.core :as plin]
             [plin.boot :as boot]
-            [plinpt.i-app-shell :as iapp]
+            [plinpt.i-app-shell :as iapp-shell]
+            [plinpt.i-application :as iapp]
             [plinpt.i-devtools :as devtools]))
 
 ;; --- State ---
@@ -20,7 +21,7 @@
 (defn sitemap-page [boot-api]
   (let [sys-state (:state boot-api)
         container (:container @sys-state)
-        routes (get container ::iapp/routes [])
+        routes (get container ::iapp-shell/routes [])
         search (:search @state)
         filtered-routes (if (str/blank? search)
                           routes
@@ -80,22 +81,21 @@
 (def plugin
   (plin/plugin
    {:doc "Sitemap visualization plugin."
-    :deps [iapp/plugin devtools/plugin boot/plugin]
+    :deps [iapp/plugin boot/plugin iapp-shell/plugin]
     
     :contributions
-    {::iapp/routes [::route]
-     ::devtools/items [{:title "Sitemap"
-                        :description "Visual map of application routes."
+    {::iapp/nav-items [{:id :sitemap
+                        :parent-id :dev-tools
+                        :label "Sitemap"
+                        :route "sitemap"
                         :icon icon-sitemap
-                        :color-class "bg-purple-500"
-                        :href "/showcase/sitemap"
+                        :component ::ui
                         :order 60}]}
 
     :beans
-    {::route
-     ^{:doc "Sitemap route definition."
-       :api {:ret :map}}
+    {::ui
+     ^{:doc "Sitemap page component."
+       :reagent-component true}
      [(fn [boot-api]
-        {:path "/showcase/sitemap"
-         :component (partial sitemap-page boot-api)})
+        (partial sitemap-page boot-api))
       ::boot/api]}}))

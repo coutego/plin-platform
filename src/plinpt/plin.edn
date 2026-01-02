@@ -123,7 +123,36 @@
   :modes [:demo] 
   :files ["src/plinpt/p_db_tools/core.cljs" "src/plinpt/p_db_tools.cljs"] 
   :entry "plinpt.p-db-tools"}
- 
+
+ ;; =============================================================================
+ ;; Platform Extras (browser only)
+ ;; =============================================================================
+ {:id :plinpt-extras.p-plugin-forge
+  :envs [:browser]
+  :files [;; Storage first (no dependencies)
+          "src/plinpt_extras/p_plugin_forge/storage.cljs"
+          ;; Prompt (no dependencies)
+          "src/plinpt_extras/p_plugin_forge/prompt.cljs"
+          ;; Core depends on storage
+          "src/plinpt_extras/p_plugin_forge/core.cljs"
+          ;; Config depends on core
+          "src/plinpt_extras/p_plugin_forge/config.cljs"
+          ;; UI pages depend on core, config, prompt
+          "src/plinpt_extras/p_plugin_forge/ui/chat_page.cljs"
+          "src/plinpt_extras/p_plugin_forge/ui/library_page.cljs"
+          "src/plinpt_extras/p_plugin_forge/ui/config_page.cljs"
+          "src/plinpt_extras/p_plugin_forge/ui/overlay.cljs"
+          ;; Main depends on all UI pages
+          "src/plinpt_extras/p_plugin_forge/ui/main.cljs"
+          ;; Plugin definition last
+          "src/plinpt_extras/p_plugin_forge.cljs"]
+  :entry "plinpt-extras.p-plugin-forge"}
+
+ {:id :plinpt-extras.p-command-palette
+  :envs [:browser]
+  :files ["src/plinpt_extras/p_command_palette.cljs"]
+  :entry "plinpt-extras.p-command-palette"}
+
  ;; =============================================================================
  ;; Server Implementation (node only)
  ;; These plugins use Node.js-specific modules and should NEVER be loaded in browser

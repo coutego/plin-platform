@@ -28,9 +28,10 @@
 (defonce ui-state (r/atom {:filter-text ""
                            :immediate? false}))
 
-(defn main-view [sys-state reload!]
-  (fn [sys-state reload!]
-    (let [{:keys [all-plugins disabled-ids]} @sys-state
+(defn main-view [api]
+  (fn [api]
+    (let [{:keys [state enable-plugin-no-reload! disable-plugin-no-reload! reload!]} api
+          {:keys [all-plugins disabled-ids]} @state
           cascading (boot/get-cascading-disabled all-plugins disabled-ids)
           
           {:keys [filter-text immediate?]} @ui-state
@@ -48,7 +49,7 @@
                       (if current-disabled?
                         ;; Enable
                         (do
-                          (swap! sys-state update :disabled-ids disj id)
+                          (enable-plugin-no-reload! id)
                           (when immediate? (reload!)))
                         
                         ;; Disable
@@ -60,10 +61,10 @@
                             (when (js/confirm (str "Disabling " id " will also disable the following plugins which depend on it:\n\n"
                                                    (str/join "\n" active-dependents)
                                                    "\n\nContinue?"))
-                              (swap! sys-state update :disabled-ids conj id)
+                              (disable-plugin-no-reload! id)
                               (when immediate? (reload!)))
                             (do
-                              (swap! sys-state update :disabled-ids conj id)
+                              (disable-plugin-no-reload! id)
                               (when immediate? (reload!)))))))]
       
       [:div {:class "flex flex-col h-full bg-gray-50"}

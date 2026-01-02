@@ -135,61 +135,67 @@
 ;; Framework root: where plin-platform is installed
 ;; When running as dependency: node_modules/plin-platform
 ;; When running from repo: cwd
+;; Use fs.realpathSync to resolve symlinks (important for npm link)
 (def framework-root
   (let [nm-path (path/join user-root "node_modules/plin-platform")]
     (if (fs/existsSync nm-path)
-      nm-path
+      ;; Resolve symlinks to get the real path
+      (fs/realpathSync nm-path)
       user-root)))
+
+(defn file-exists? 
+  "Check if file exists, resolving symlinks."
+  [file-path]
+  (try
+    (fs/existsSync file-path)
+    (catch :default _
+      false)))
 
 (defn resolve-path
   "Resolves a file path to an absolute path.
    
-   Handles three cases:
-   1. Framework libs (libs/*) - Look in framework-root
-   2. Platform plugins (src/plinpt/*) - Look in framework-root
-   3. Framework tools (src/plin_platform/*) - Look in framework-root
-   4. User files - Look in user-root"
+   Handles these cases:
+   1. Framework paths (libs/*, src/plinpt/*, src/plinpt_extras/*, src/plin_platform/*) 
+      - Look in framework-root first, then user-root
+   2. User files - Look in user-root first, then framework-root
+   
+   Returns the first path that exists."
   [file-path]
-  (cond
-    ;; Framework libs (libs/malli, libs/plin, etc.)
-    (str/starts-with? file-path "libs/")
-    (let [fw-path (path/join framework-root file-path)]
-      (if (fs/existsSync fw-path)
-        fw-path
-        (path/join user-root file-path)))
-    
-    ;; Platform plugins (src/plinpt/*)
-    (str/starts-with? file-path "src/plinpt/")
-    (let [fw-path (path/join framework-root file-path)]
-      (if (fs/existsSync fw-path)
-        fw-path
-        (path/join user-root file-path)))
-    
-    ;; Framework tools (src/plin_platform/*)
-    (str/starts-with? file-path "src/plin_platform/")
-    (let [fw-path (path/join framework-root file-path)]
-      (if (fs/existsSync fw-path)
-        fw-path
-        (path/join user-root file-path)))
-    
-    ;; User files - check user-root first, then framework-root
-    :else
-    (let [user-path (path/join user-root file-path)]
-      (if (fs/existsSync user-path)
-        user-path
-        (path/join framework-root file-path)))))
+  (let [fw-path (path/join framework-root file-path)
+        user-path (path/join user-root file-path)
+        ;; Determine if this is a framework path
+        is-framework-path? (or (str/starts-with? file-path "libs/")
+                               (str/starts-with? file-path "src/plinpt/")
+                               (str/starts-with? file-path "src/plinpt_extras/")
+                               (str/starts-with? file-path "src/plin_platform/"))
+        ;; Check which paths exist
+        fw-exists? (file-exists? fw-path)
+        user-exists? (file-exists? user-path)]
+    (cond
+      ;; Framework path: prefer framework-root
+      (and is-framework-path? fw-exists?) fw-path
+      (and is-framework-path? user-exists?) user-path
+      
+      ;; User path: prefer user-root
+      (and (not is-framework-path?) user-exists?) user-path
+      (and (not is-framework-path?) fw-exists?) fw-path
+      
+      ;; Neither exists - return the expected path for error message
+      is-framework-path? fw-path
+      :else user-path)))
 
 (defn read-file [file-path]
   (let [full-path (resolve-path file-path)]
-    (try
+    (if (file-exists? full-path)
       (fs/readFileSync full-path "utf8")
-      (catch :default e
-        (println "Error reading file:" full-path)
-        (println "  Original path:" file-path)
-        (println "  User root:" user-root)
+      (do
+        (println "ERROR: File not found:" file-path)
+        (println "  Resolved path:" full-path)
+        (println "  Framework path:" (path/join framework-root file-path) "exists?" (file-exists? (path/join framework-root file-path)))
+        (println "  User path:" (path/join user-root file-path) "exists?" (file-exists? (path/join user-root file-path)))
         (println "  Framework root:" framework-root)
-        (js/console.error e)
-        (throw e)))))
+        (println "  User root:" user-root)
+        (throw (js/Error. (str "File not found: " file-path " (resolved to: " full-path ")")))))))
 
 (defn read-edn-file [file-path]
   (when (fs/existsSync file-path)
@@ -295,6 +301,7 @@
               "libs/injectable/easy.cljc"
               "libs/injectable/container.cljc"
               "libs/injectable/core.cljc"
+              "libs/plin/bean_redefs.cljc"
               "libs/plin/core.cljc"
               "libs/plin/boot.cljc"]
         plugins (get-manifest-files)

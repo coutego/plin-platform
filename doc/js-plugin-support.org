@@ -1,0 +1,927 @@
+#+TITLE: JavaScript Plugin Support - Design Document
+#+AUTHOR: PLIN Platform Team
+#+DATE: 2024
+
+* Overview
+
+This document describes the design for supporting JavaScript/React plugins in the PLIN platform. The goal is to allow developers to write plugins in plain JavaScript (or TypeScript/JSX/TSX) while maintaining full integration with the existing ClojureScript plugin architecture.
+
+** Design Principles
+
+1. *JS plugins are first-class citizens* - They can define beans, contributions, extensions, and dependencies just like CLJS plugins.
+2. *Minimal framework complexity* - JS plugins are wrapped into standard CLJS plugin structures. The rest of the system doesn't know or care about their origin.
+3. *JS authors adapt to CLJS conventions* - Data conversion between JS and CLJS is handled at the boundary. JS authors may need to use utility functions for complex cases.
+4. *No globals or special boot sequences* - JS plugins are loaded via fetch+eval, controlled entirely by CLJS.
+
+* Architecture
+
+** High-Level Flow
+
+#+BEGIN_SRC
+┌─────────────────────────────────────────────────────────────┐
+│                     client_boot.cljs                        │
+├─────────────────────────────────────────────────────────────┤
+│ 1. get-manifest() → full manifest                           │
+│                                                             │
+│ 2. get-cljs-plugins() → resolve CLJS plugin vars            │
+│                                                             │
+│ 3. js-loader/load-js-plugins(manifest)                      │
+│    - Filter manifest for :type :js                          │
+│    - For each: fetch file, eval, wrap                       │
+│    - Return vector of wrapped plugin maps                   │
+│                                                             │
+│ 4. Combine: (into cljs-plugins js-plugins)                  │
+│                                                             │
+│ 5. boot/bootstrap!(all-plugins, disabled-ids)               │
+└─────────────────────────────────────────────────────────────┘
+#+END_SRC
+
+** Key Insight: Wrapping
+
+A JS plugin definition like:
+
+#+BEGIN_SRC javascript
+return {
+    doc: "My plugin",
+    deps: ["plinpt.i-application"],
+    beans: {
+        "my-page": { type: "react-component", value: MyComponent }
+    },
+    contributions: {
+        "plinpt.i-application/nav-items": [{ id: "my-page", ... }]
+    }
+};
+#+END_SRC
+
+Gets wrapped into a standard CLJS plugin map:
+
+#+BEGIN_SRC clojure
+{:id :my-namespace/plugin
+ :doc "My plugin"
+ :deps [:plinpt.i-application/plugin]
+ :beans {:my-namespace/my-page ^{:reagent-component true} [:= MyComponent]}
+ :contributions {:plinpt.i-application/nav-items [...]}}
+#+END_SRC
+
+After wrapping, the plugin is indistinguishable from a native CLJS plugin.
+
+* Prerequisite: Dependency ID Refactoring
+
+** Current Problem
+
+Currently, ~:deps~ in plugins contains full plugin maps:
+
+#+BEGIN_SRC clojure
+:deps [iapp/plugin other/plugin]  ;; These are actual map values
+#+END_SRC
+
+This works because the CLJS macro resolves the vars at compile time. However, JS plugins cannot reference CLJS vars, so they must use IDs:
+
+#+BEGIN_SRC javascript
+deps: ["plinpt.i-application"]  // String ID
+#+END_SRC
+
+** Solution: Support ID-Based Dependencies
+
+Refactor the dependency resolution to accept both formats:
+- Keyword IDs: ~:plinpt.i-application/plugin~
+- Plugin maps: ~{:id :plinpt.i-application/plugin ...}~ (backward compatible)
+- Strings: ~"plinpt.i-application"~ (converted to keyword)
+
+** Implementation Steps
+
+*** Step 1: Add normalization function to pluggable/container.cljc
+
+#+BEGIN_SRC clojure
+(defn- normalize-dep
+  "Normalizes a dependency to a keyword ID.
+   Accepts: keyword, plugin map, or string."
+  [dep]
+  (cond
+    (keyword? dep) dep
+    (map? dep) (:id dep)
+    (string? dep) (keyword dep "plugin")
+    :else (throw (ex-info (str "Invalid dependency format: " dep) {:dep dep}))))
+#+END_SRC
+
+*** Step 2: Modify process-plugin-deps
+
+The current implementation recursively processes deps as plugin maps. Refactor to:
+
+1. Build an ID → plugin lookup map
+2. Normalize all deps to IDs
+3. Perform topological sort using IDs
+4. Return plugins in sorted order
+
+#+BEGIN_SRC clojure
+(defn process-plugin-deps [plugins]
+  (let [;; Build ID -> plugin map for lookup
+        by-id (into {} (map (juxt :id identity) plugins))
+        
+        ;; Normalize deps in all plugins to IDs
+        normalize-deps (fn [p]
+                         (update p :deps #(mapv normalize-dep (or % []))))
+        plugins-normalized (map normalize-deps plugins)
+        
+        ;; Topological sort (existing logic, but using IDs for lookup)
+        sorted (topological-sort-by-id plugins-normalized by-id)]
+    sorted))
+#+END_SRC
+
+*** Step 3: Update validation in plin/core.cljc
+
+The ~validate-dependencies~ function checks that referenced keys exist in deps. Update it to handle ID-based deps:
+
+#+BEGIN_SRC clojure
+(defn validate-dependencies [plugin-map all-plugins]
+  ;; Instead of checking (every? map? deps), 
+  ;; resolve IDs to maps first, then validate
+  ...)
+#+END_SRC
+
+*Note:* Validation may need to be deferred until all plugins are known, or made optional for JS plugins.
+
+*** Step 4: Backward Compatibility
+
+Existing CLJS plugins using ~[iapp/plugin]~ will continue to work because the macro resolves to maps, and maps are normalized via ~(:id dep)~.
+
+* JS Plugin Loader Implementation
+
+** Module: libs/plin/js_loader.cljc
+
+This module provides the core functionality for loading and wrapping JS plugins.
+
+*** Public API
+
+#+BEGIN_SRC clojure
+(ns plin.js-loader
+  "Loads JavaScript plugins and wraps them as CLJS plugin structures.")
+
+(defn load-js-plugins
+  "Given a manifest, loads all :type :js entries and returns wrapped plugins.
+   
+   Arguments:
+   - manifest: The full manifest (vector of entries)
+   
+   Returns:
+   - Vector of wrapped CLJS plugin maps
+   
+   Note: JS files must be accessible via fetch. In browser, this means
+   they should be served by the dev server or included in the build."
+  [manifest]
+  ...)
+
+(defn wrap-js-plugin
+  "Wraps a single JS plugin definition into a CLJS plugin map.
+   
+   Arguments:
+   - js-def: The JavaScript object returned by the plugin file
+   - manifest-entry: The manifest entry for this plugin (contains :id, etc.)
+   
+   Returns:
+   - A CLJS plugin map"
+  [js-def manifest-entry]
+  ...)
+#+END_SRC
+
+*** Loading Mechanism
+
+JS plugins are loaded via fetch + eval, not ~<script>~ tags:
+
+#+BEGIN_SRC clojure
+(defn- fetch-and-eval [url]
+  (-> (js/fetch url)
+      (.then #(.text %))
+      (.then (fn [code]
+               (let [wrapped (str "(function(){" code "})()")
+                     result (js/eval wrapped)]
+                 result)))))
+#+END_SRC
+
+This approach:
+- Gives CLJS full control over loading order
+- Captures the return value (plugin definition)
+- Avoids global namespace pollution
+- Works identically for hot reload
+
+*** Wrapping Logic
+
+**** Namespace Derivation
+
+The namespace is derived from the manifest ~:id~:
+
+#+BEGIN_SRC clojure
+(defn- derive-namespace [manifest-entry]
+  (let [id (:id manifest-entry)]
+    (if (namespace id)
+      (str (namespace id) "." (name id))
+      (name id))))
+
+;; Examples:
+;; {:id :showcase.hello-react} → "showcase.hello-react"
+;; {:id :showcase/hello-react} → "showcase.hello-react"
+#+END_SRC
+
+**** Bean Wrapping
+
+#+BEGIN_SRC clojure
+(defn- wrap-bean [bean-def qualified-key]
+  (let [{:keys [type value doc]} (js->clj bean-def :keywordize-keys true)
+        meta-map (cond-> {}
+                   doc (assoc :doc doc)
+                   (= type "react-component") (assoc :reagent-component true))]
+    (with-meta [:= value] meta-map)))
+
+(defn- wrap-beans [js-beans qualify-fn]
+  (let [beans (js->clj js-beans :keywordize-keys true)]
+    (into {}
+      (for [[k v] beans]
+        (let [qk (qualify-fn (name k))]
+          [qk (wrap-bean v qk)])))))
+#+END_SRC
+
+**** Contribution Wrapping
+
+Contributions may contain internal bean references (strings like ~"my-page"~) that need to be converted to qualified keywords:
+
+#+BEGIN_SRC clojure
+(defn- resolve-bean-refs [v ns-str]
+  (cond
+    ;; String that looks like a bean reference
+    (and (string? v) (re-matches #"^[a-z][a-z0-9-]*$" v))
+    (keyword ns-str v)
+    
+    ;; Recurse into maps
+    (map? v)
+    (into {} (for [[mk mv] v] [mk (resolve-bean-refs mv ns-str)]))
+    
+    ;; Recurse into vectors
+    (vector? v)
+    (mapv #(resolve-bean-refs % ns-str) v)
+    
+    ;; Pass through other values
+    :else v))
+
+(defn- wrap-contributions [js-contribs ns-str]
+  (let [contribs (js->clj js-contribs :keywordize-keys true)]
+    (into {}
+      (for [[k v] contribs]
+        (let [;; Key like "plinpt.i-application/nav-items" → keyword
+              kw (keyword (namespace (keyword k)) (name (keyword k)))
+              ;; Resolve internal bean references
+              resolved-v (resolve-bean-refs v ns-str)]
+          [kw resolved-v])))))
+#+END_SRC
+
+**** Extension Wrapping
+
+JS plugins can define extensions. The handler function needs to be wrapped for CLJS↔JS conversion:
+
+#+BEGIN_SRC clojure
+(defn- wrap-extension-handler [js-handler]
+  (fn [db vals]
+    (let [js-db (clj->js db)
+          js-vals (clj->js vals)
+          js-result (js-handler js-db js-vals)]
+      (js->clj js-result :keywordize-keys true))))
+
+(defn- wrap-extension [ext-def ns-str]
+  (let [ext (js->clj ext-def :keywordize-keys true)
+        key-str (:key ext)
+        ;; If key doesn't have namespace, qualify it
+        ext-key (if (str/includes? key-str "/")
+                  (keyword (namespace (keyword key-str)) (name (keyword key-str)))
+                  (keyword ns-str key-str))]
+    {:key ext-key
+     :doc (:doc ext)
+     :handler (wrap-extension-handler (:handler ext))
+     :spec (:spec ext)}))
+
+(defn- wrap-extensions [js-extensions ns-str]
+  (when js-extensions
+    (mapv #(wrap-extension % ns-str) (js->clj js-extensions))))
+#+END_SRC
+
+**** Complete Wrapper
+
+#+BEGIN_SRC clojure
+(defn wrap-js-plugin [js-def manifest-entry]
+  (let [ns-str (derive-namespace manifest-entry)
+        plugin-id (keyword ns-str "plugin")
+        qualify (fn [s] (keyword ns-str s))
+        
+        ;; Convert deps (strings → keyword IDs)
+        js-deps (or (js->clj (.-deps js-def)) [])
+        deps (mapv #(keyword % "plugin") js-deps)]
+    
+    {:id plugin-id
+     :doc (.-doc js-def)
+     :deps deps
+     :extensions (wrap-extensions (.-extensions js-def) ns-str)
+     :beans (wrap-beans (.-beans js-def) qualify)
+     :contributions (wrap-contributions (.-contributions js-def) ns-str)}))
+#+END_SRC
+
+** Integration with client_boot.cljs
+
+#+BEGIN_SRC clojure
+(ns plin-platform.client-boot
+  (:require [plin.boot :as boot]
+            [plin.js-loader :as js-loader]
+            ...))
+
+(defn init []
+  (when is-browser?
+    (let [manifest (get-manifest)
+          cljs-plugins (get-plugins)
+          initially-disabled (get-initially-disabled-ids)]
+      
+      ;; Load JS plugins (returns a Promise)
+      (-> (js-loader/load-js-plugins manifest)
+          (.then (fn [js-plugins]
+                   (let [all-plugins (into cljs-plugins js-plugins)]
+                     (boot/bootstrap! all-plugins initially-disabled))))))))
+#+END_SRC
+
+*Note:* This makes ~init~ async. The current implementation is sync. This is a necessary change.
+
+** Integration with index.html
+
+Remove the script tag loading for JS plugins. The JS loader handles it via fetch:
+
+#+BEGIN_SRC javascript
+// In the plugin loading loop, skip :type :js
+pluginsToLoad.forEach(function(plugin) {
+    if (plugin.type !== 'js') {  // Skip JS plugins
+        plugin.files.forEach(function(file) {
+            load(file);
+        });
+    }
+});
+#+END_SRC
+
+* JS Plugin API
+
+** Plugin Definition Structure
+
+#+BEGIN_SRC javascript
+return {
+    // Optional: Documentation string
+    doc: "Description of this plugin",
+    
+    // Optional: Dependencies (namespace strings, without /plugin suffix)
+    deps: ["plinpt.i-application", "plinpt.i-devtools"],
+    
+    // Optional: Extension points this plugin defines
+    extensions: [{
+        key: "my-extension",           // Will be qualified with plugin namespace
+        doc: "What this extension collects",
+        handler: (db, vals) => {       // JS function
+            // db: current database (JS object)
+            // vals: array of contributed values
+            // Return: updated database
+            return { ...db, myKey: vals.flat() };
+        }
+    }],
+    
+    // Optional: Contributions to other plugins' extensions
+    contributions: {
+        // Key is fully qualified (namespace/name)
+        "plinpt.i-application/nav-items": [{
+            id: "my-feature",
+            label: "My Feature",
+            route: "/my-feature",
+            component: "main-page",    // Reference to bean below
+            icon: "icon",              // Reference to bean below
+            order: 50
+        }],
+        
+        "plinpt.i-devtools/items": [{
+            title: "My Tool",
+            href: "/my-tool",
+            icon: "tool-icon"
+        }]
+    },
+    
+    // Optional: Bean definitions
+    beans: {
+        // Key will be qualified with plugin namespace
+        "main-page": {
+            doc: "The main page component",
+            type: "react-component",   // or "function", "value"
+            value: MainPageComponent   // The actual React component
+        },
+        "icon": {
+            type: "react-component",
+            value: IconComponent
+        },
+        "config": {
+            type: "value",
+            value: { theme: "dark", maxItems: 100 }
+        },
+        "handler": {
+            doc: "A function that processes data",
+            type: "function",
+            value: (data) => data.map(x => x * 2)
+        }
+    }
+};
+#+END_SRC
+
+** Bean Types
+
+| Type | Description | Value |
+|------|-------------|-------|
+| ~react-component~ | A React functional or class component | Component function/class |
+| ~function~ | A callable function | Function |
+| ~value~ | A static value (config, data) | Any JS value |
+
+** Manifest Entry
+
+#+BEGIN_SRC clojure
+{:id :showcase.hello-react      ;; Required: determines namespace
+ :type :js                      ;; Required: marks as JS plugin
+ :envs [:browser]               ;; Optional: environment filter
+ :modes [:demo]                 ;; Optional: mode filter
+ :files ["libs/showcase/hello_react.js"]}  ;; Required: path to JS file
+#+END_SRC
+
+*Note:* No ~:entry~ field needed. The file itself returns the plugin definition.
+
+* Example: Complete JS Plugin
+
+#+BEGIN_SRC javascript
+// libs/showcase/hello_react.js
+
+// Define React components
+const HelloPage = () => {
+    const [count, setCount] = React.useState(0);
+    
+    return React.createElement("div", 
+        { className: "p-10 bg-white rounded-xl shadow-lg max-w-md mx-auto mt-10" },
+        React.createElement("h1", 
+            { className: "text-3xl font-bold text-blue-600 mb-4" },
+            "Hello from React!"
+        ),
+        React.createElement("p",
+            { className: "text-gray-600 mb-6" },
+            "This plugin is written in plain JavaScript."
+        ),
+        React.createElement("button", {
+            className: "px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600",
+            onClick: () => setCount(c => c + 1)
+        }, "Count: " + count)
+    );
+};
+
+const HelloIcon = () => {
+    return React.createElement("svg", {
+        className: "w-5 h-5",
+        fill: "none",
+        stroke: "currentColor",
+        viewBox: "0 0 24 24"
+    },
+        React.createElement("path", {
+            strokeLinecap: "round",
+            strokeLinejoin: "round",
+            strokeWidth: 2,
+            d: "M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        })
+    );
+};
+
+// Plugin definition
+return {
+    doc: "A sample React plugin demonstrating JavaScript integration with PLIN",
+    
+    deps: ["plinpt.i-application"],
+    
+    contributions: {
+        "plinpt.i-application/nav-items": [{
+            id: "hello-react",
+            label: "Hello React",
+            description: "A React component loaded from JavaScript",
+            route: "/hello-react",
+            icon: "icon",
+            component: "page",
+            order: 50
+        }]
+    },
+    
+    beans: {
+        "page": {
+            doc: "The Hello React page component",
+            type: "react-component",
+            value: HelloPage
+        },
+        "icon": {
+            doc: "Navigation icon for the sidebar",
+            type: "react-component",
+            value: HelloIcon
+        }
+    }
+};
+#+END_SRC
+
+* TypeScript/TSX Support
+
+** Overview
+
+TypeScript developers can write plugins in TSX with full type safety. The workflow involves:
+
+1. Write plugin in ~.tsx~ file
+2. Compile with esbuild to ~.js~
+3. PLIN loads the compiled ~.js~ file
+
+** Project Structure
+
+#+BEGIN_SRC
+my-app/
+├── package.json
+├── plin.edn                  # Points to compiled JS
+├── tsconfig.json
+├── build.config.js           # esbuild configuration
+├── plin-types.d.ts           # Type definitions
+├── plugins/                  # TSX source
+│   └── hello/
+│       └── index.tsx
+├── dist/                     # Compiled output (gitignored)
+│   └── plugins/
+│       └── hello.js
+└── src/                      # Optional CLJS plugins
+    └── my_app/
+        └── core.cljs
+#+END_SRC
+
+** Type Definitions
+
+#+BEGIN_SRC typescript
+// plin-types.d.ts
+
+declare namespace Plin {
+    interface BeanDefinition {
+        doc?: string;
+        type: "react-component" | "function" | "value";
+        value: any;
+    }
+    
+    interface NavItem {
+        id: string;
+        label: string;
+        description?: string;
+        route: string;
+        icon?: string;        // Bean reference
+        component?: string;    // Bean reference
+        order?: number;
+        parentId?: string;
+        requiredPerm?: string;
+        extra?: Record<string, any>;
+    }
+    
+    interface DevToolItem {
+        title: string;
+        description?: string;
+        href: string;
+        icon?: string;
+        colorClass?: string;
+        order?: number;
+    }
+    
+    interface ExtensionDefinition {
+        key: string;
+        doc: string;
+        handler: (db: any, vals: any[]) => any;
+        spec?: any;
+    }
+    
+    interface PluginDefinition {
+        doc?: string;
+        deps?: string[];
+        extensions?: ExtensionDefinition[];
+        contributions?: {
+            "plinpt.i-application/nav-items"?: NavItem[];
+            "plinpt.i-devtools/items"?: DevToolItem[];
+            [key: string]: any;
+        };
+        beans?: Record<string, BeanDefinition>;
+    }
+}
+#+END_SRC
+
+** Example TSX Plugin
+
+#+BEGIN_SRC typescript
+// plugins/hello/index.tsx
+import React, { useState } from 'react';
+
+const HelloPage: React.FC = () => {
+    const [count, setCount] = useState(0);
+    
+    return (
+        <div className="p-10 bg-white rounded-xl shadow-lg max-w-md mx-auto mt-10">
+            <h1 className="text-3xl font-bold text-blue-600 mb-4">
+                Hello from TSX!
+            </h1>
+            <p className="text-gray-600 mb-6">
+                This plugin is written in TypeScript with JSX.
+            </p>
+            <button 
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                onClick={() => setCount(c => c + 1)}
+            >
+                Count: {count}
+            </button>
+        </div>
+    );
+};
+
+const HelloIcon: React.FC = () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2}
+            d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+        />
+    </svg>
+);
+
+const plugin: Plin.PluginDefinition = {
+    doc: "Hello plugin written in TypeScript/TSX",
+    deps: ["plinpt.i-application"],
+    
+    contributions: {
+        "plinpt.i-application/nav-items": [{
+            id: "hello-tsx",
+            label: "Hello TSX",
+            description: "A TypeScript React component",
+            route: "/hello-tsx",
+            icon: "icon",
+            component: "page",
+            order: 51
+        }]
+    },
+    
+    beans: {
+        "page": {
+            doc: "The Hello TSX page component",
+            type: "react-component",
+            value: HelloPage
+        },
+        "icon": {
+            doc: "Navigation icon",
+            type: "react-component",
+            value: HelloIcon
+        }
+    }
+};
+
+export default plugin;
+#+END_SRC
+
+** esbuild Configuration
+
+#+BEGIN_SRC javascript
+// build.config.js
+const esbuild = require('esbuild');
+const fs = require('fs');
+const path = require('path');
+
+// Find all plugin entry points
+const pluginsDir = './plugins';
+const plugins = fs.readdirSync(pluginsDir)
+    .filter(f => fs.statSync(path.join(pluginsDir, f)).isDirectory())
+    .map(f => ({
+        name: f,
+        entry: path.join(pluginsDir, f, 'index.tsx')
+    }))
+    .filter(p => fs.existsSync(p.entry));
+
+const isWatch = process.argv.includes('--watch');
+
+async function build() {
+    for (const plugin of plugins) {
+        const ctx = await esbuild.context({
+            entryPoints: [plugin.entry],
+            bundle: true,
+            outfile: `dist/plugins/${plugin.name}.js`,
+            format: 'iife',
+            globalName: '__plin_plugin__',
+            external: ['react', 'react-dom'],
+            jsx: 'automatic',
+            minify: !isWatch,
+            sourcemap: isWatch,
+            banner: {
+                js: '// PLIN JS Plugin - Auto-generated, do not edit'
+            },
+            footer: {
+                js: 'return __plin_plugin__.default || __plin_plugin__;'
+            }
+        });
+        
+        if (isWatch) {
+            await ctx.watch();
+            console.log(`Watching ${plugin.name}...`);
+        } else {
+            await ctx.rebuild();
+            await ctx.dispose();
+            console.log(`Built ${plugin.name}`);
+        }
+    }
+}
+
+build().catch(e => {
+    console.error(e);
+    process.exit(1);
+});
+#+END_SRC
+
+** Manifest Entry for TSX Plugin
+
+#+BEGIN_SRC clojure
+{:id :my-app.hello-tsx
+ :type :js
+ :envs [:browser]
+ :files ["dist/plugins/hello.js"]}  ;; Points to compiled output
+#+END_SRC
+
+** create-plin-app --tsx Flag
+
+The ~create-plin-app~ script should support a ~--tsx~ flag that:
+
+1. Adds dev dependencies: ~esbuild~, ~typescript~, ~@types/react~
+2. Creates ~tsconfig.json~
+3. Creates ~build.config.js~
+4. Creates ~plin-types.d.ts~
+5. Creates example plugin in ~plugins/hello/index.tsx~
+6. Updates ~package.json~ scripts:
+   - ~build:plugins~: Compile TSX to JS
+   - ~watch:plugins~: Watch mode compilation
+   - ~dev~: Run both watch and server concurrently
+7. Updates manifest to include compiled JS plugin
+
+* Hot Reload
+
+** How It Works
+
+Hot reload for JS plugins works identically to CLJS plugins because wrapped JS plugins are standard CLJS plugin maps.
+
+** Dynamic Loader Integration
+
+The dynamic loader (~p-dynamic-loader~) needs a small update to handle ~.js~ files:
+
+#+BEGIN_SRC clojure
+(defn load-plugin-from-file [filename content]
+  (cond
+    ;; JavaScript file
+    (str/ends-with? filename ".js")
+    (let [;; Eval the JS code
+          wrapped (str "(function(){" content "})()")
+          js-def (js/eval wrapped)
+          ;; Create a manifest entry from filename
+          manifest-entry {:id (derive-id-from-filename filename)}]
+      (js-loader/wrap-js-plugin js-def manifest-entry))
+    
+    ;; ClojureScript file (existing logic)
+    (or (str/ends-with? filename ".cljs")
+        (str/ends-with? filename ".cljc"))
+    (let [_ (scittle.core/eval_string content)
+          ns-str (extract-ns content)]
+      (resolve-plugin ns-str))
+    
+    :else
+    (throw (ex-info "Unsupported file type" {:filename filename}))))
+#+END_SRC
+
+** TSX Hot Reload
+
+For TSX plugins, the workflow is:
+
+1. Developer saves ~.tsx~ file
+2. esbuild (in watch mode) recompiles to ~.js~
+3. Developer uploads the compiled ~.js~ via dynamic loader
+   - Or: A file watcher triggers automatic reload
+
+Future enhancement: Direct TSX upload with in-browser compilation (using esbuild-wasm).
+
+* Server-Side Considerations (nbb)
+
+** Current Scope
+
+For v1, JS plugins are browser-only (~:envs [:browser]~). Server-side support is deferred.
+
+** Future Approach
+
+For nbb/Node.js, the loading mechanism would differ:
+
+#+BEGIN_SRC clojure
+(defn load-js-file-node [path]
+  (let [fs (js/require "fs")
+        content (.readFileSync fs path "utf8")
+        wrapped (str "(function(){" content "})()")
+        result (js/eval wrapped)]
+    result))
+#+END_SRC
+
+The wrapping logic remains identical.
+
+* Implementation Checklist
+
+** Phase 1: Dependency Refactoring
+
+- [ ] Add ~normalize-dep~ function to ~pluggable/container.cljc~
+- [ ] Update ~process-plugin-deps~ to use ID-based resolution
+- [ ] Update ~make-plugin-list~ to work with normalized deps
+- [ ] Update ~validate-dependencies~ in ~plin/core.cljc~
+- [ ] Test backward compatibility with existing CLJS plugins
+- [ ] Update documentation in AGENTS.md
+
+** Phase 2: JS Loader Core
+
+- [ ] Create ~libs/plin/js_loader.cljc~
+- [ ] Implement ~fetch-and-eval~ for browser
+- [ ] Implement ~wrap-js-plugin~ with all sub-functions
+- [ ] Implement ~wrap-beans~
+- [ ] Implement ~wrap-contributions~ with bean reference resolution
+- [ ] Implement ~wrap-extensions~ with handler wrapping
+- [ ] Implement ~load-js-plugins~ (main entry point)
+- [ ] Add error handling with clear messages
+
+** Phase 3: Boot Integration
+
+- [ ] Update ~client_boot.cljs~ to call JS loader
+- [ ] Handle async loading (Promise-based)
+- [ ] Update ~index.html~ to skip JS plugin script tags
+- [ ] Test with ~hello_react.js~ example
+
+** Phase 4: Dynamic Loader Integration
+
+- [ ] Update ~p-dynamic-loader~ to handle ~.js~ files
+- [ ] Test hot reload with JS plugins
+
+** Phase 5: TSX Tooling
+
+- [ ] Create ~plin-types.d.ts~ template
+- [ ] Create ~build.config.js~ template
+- [ ] Update ~create-plin-app.js~ with ~--tsx~ flag
+- [ ] Create example TSX plugin
+- [ ] Update documentation
+
+** Phase 6: Documentation & Examples
+
+- [ ] Update README.org with JS plugin section
+- [ ] Update AGENTS.md with JS plugin conventions
+- [ ] Create comprehensive example JS plugin
+- [ ] Create comprehensive example TSX plugin
+
+* Things to Be Careful About
+
+** Data Conversion
+
+- Always use ~:keywordize-keys true~ when converting JS→CLJS
+- Be aware that ~clj->js~ converts keywords to strings
+- Nested structures need recursive conversion
+
+** Bean Reference Resolution
+
+The heuristic for detecting bean references (simple lowercase identifiers) may have false positives. Consider:
+
+#+BEGIN_SRC javascript
+contributions: {
+    "some/extension": [{
+        name: "hello",      // Is this a bean ref or a string value?
+        component: "page"   // This is definitely a bean ref
+    }]
+}
+#+END_SRC
+
+Solution: Use explicit markers or document that certain fields are always bean refs.
+
+** Error Messages
+
+JS plugin errors should clearly indicate:
+- Which plugin failed
+- Whether it's a loading, parsing, or wrapping error
+- The original JS error message
+
+** React Version Compatibility
+
+JS plugins use the global ~React~ object. Ensure version compatibility between:
+- React loaded via CDN in index.html
+- React expected by compiled TSX plugins
+
+** Circular Dependencies
+
+JS plugins can depend on CLJS plugins, and CLJS plugins can depend on JS plugins (via ID). However, circular dependencies between specific plugins will fail at runtime.
+
+** Extension Handler Complexity
+
+JS extension handlers receive and must return plain JS objects. Complex CLJS data structures (records, protocols) won't survive the conversion. Document this limitation.
+
+* Future Enhancements
+
+1. *In-browser TSX compilation* - Use esbuild-wasm for direct TSX upload
+2. *Server-side JS plugins* - Support for nbb/Node.js
+3. *JS plugin debugging tools* - Inspect wrapped structure, test handlers
+4. *Plugin templates* - ~create-plin-plugin~ command for scaffolding
+5. *Type generation* - Auto-generate TypeScript types from CLJS interfaces

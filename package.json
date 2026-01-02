@@ -1,6 +1,6 @@
 {
   "name": "plin-platform",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Pluggable & Injectable Platform for ClojureScript",
   "main": "src/plin_platform/server.cljs",
   "bin": {

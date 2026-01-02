@@ -73,6 +73,22 @@
             ;; Else stop
             stack))))))
 
+(defn- group-items
+  "Groups items by section.
+   Items without a section come first.
+   Then items are grouped by section, preserving the order of appearance of sections."
+  [items]
+  (let [grouped (group-by :section items)
+        ;; Get sections in order of appearance
+        sections (->> items
+                      (map :section)
+                      (distinct)
+                      (remove nil?))]
+    ;; Build result: items with no section first, then items for each section
+    (cond-> []
+      (seq (get grouped nil)) (conj (get grouped nil))
+      true (into (map #(get grouped %) sections)))))
+
 ;; --- Components ---
 
 (defn icon-chevron-right []
@@ -149,7 +165,7 @@
             active-id (:id active-item)
             
             ;; Group items by section
-            grouped-items (partition-by :section items)]
+            grouped-items (group-items items)]
         
         ;; Sidebar: top-16 positions it below the header, h-[calc(100vh-4rem)] gives it the remaining height
         [:aside {:class (str "bg-white border-r border-slate-200 fixed top-16 h-[calc(100vh-4rem)] z-30 flex flex-col overflow-hidden transition-all duration-300 "

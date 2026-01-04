@@ -133,7 +133,13 @@
               :register-plugin! register-plugin!
               :enable-plugin! enable-plugin!
               :disable-plugin! disable-plugin!
-              :toggle-plugin! toggle-plugin!})]
+              :toggle-plugin! toggle-plugin!
+              :enable-plugin-no-reload! (fn [plugin-id]
+                                          (swap! state update :disabled-ids disj plugin-id)
+                                          nil)
+              :disable-plugin-no-reload! (fn [plugin-id]
+                                           (swap! state update :disabled-ids conj plugin-id)
+                                           nil)})]
      
      ::boot-fn
      ^{:doc "Function called after the container is created.

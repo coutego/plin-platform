@@ -1,0 +1,54 @@
+# Changelog
+
+All notable changes to the PLIN Platform will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+#### Plugin Forge - AI-Powered Plugin Creator
+A new development tool that allows users to create PLIN plugins through natural language conversation with an AI assistant.
+
+- **Chat Interface**: Conversational UI for describing plugin requirements in plain English
+- **Streaming Responses**: Real-time streaming of AI responses with live syntax highlighting
+- **Plugin Code Detection**: Automatic detection and special rendering of plugin code blocks with collapsible views
+- **One-Click Loading**: Load generated plugins directly into the running application without restart
+- **Hot-Reload Support**: Test plugins immediately with enable/disable toggle via draggable overlay panel
+- **Error Display & Auto-Fix**: When plugin loading fails, errors are displayed in the UI with an "Ask AI to Fix" button that automatically sends the error context back to the AI for correction
+- **Plugin Library**: Save, manage, and version generated plugins locally (localStorage)
+- **Export/Import**: Download plugins as `.cljs` files or export entire library as JSON
+- **Cost Tracking**: Track API usage costs per chat and per session
+- **Configurable LLM**: Support for multiple models via OpenRouter API with custom model input
+- **Custom System Prompts**: Advanced settings to customize the AI's behavior
+
+#### Command Palette
+A global keyboard-accessible navigation tool inspired by VS Code and other modern applications.
+
+- **Keyboard Shortcut**: Trigger with `Ctrl+K` (Windows/Linux) or `Cmd+K` (macOS)
+- **Fuzzy Search**: Quick filtering of all available routes with fuzzy matching
+- **Keyboard Navigation**: Navigate results with arrow keys, select with Enter, dismiss with Escape
+- **Visual Feedback**: Highlighted selection with smooth scrolling to keep selected item visible
+- **Route Display**: Shows all registered application routes for quick navigation
+
+### Changed
+
+- Updated documentation in README.org with Plugin Forge and Command Palette examples
+- Added Plugin Forge to the platform's default plugin manifest
+
+### Technical Details
+
+#### Plugin Forge Architecture
+- `p-plugin-forge`: Main plugin definition with nav-item and overlay contributions
+- `p-plugin-forge/core.cljs`: State management with Reagent atoms, localStorage persistence
+- `p-plugin-forge/config.cljs`: LLM configuration and cost calculation
+- `p-plugin-forge/prompt.cljs`: System prompt for AI plugin generation
+- `p-plugin-forge/storage.cljs`: localStorage abstraction for config, library, and chat history
+- `p-plugin-forge/ui/`: UI components split into chat, library, config pages, main layout, and overlay
+
+#### Command Palette Architecture
+- Single-file plugin demonstrating overlay component pattern
+- Uses `::iapp/overlay-components` extension point
+- Integrates with `::iapp/all-routes` for route discovery

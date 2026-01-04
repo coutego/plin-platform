@@ -35,7 +35,7 @@ async function main() {
       version: '0.1.0',
       private: true,
       dependencies: {
-        "plin-platform": "^0.3.2",
+        "plin-platform": "^0.4.3",
         "nbb": "^1.3.205",
         "react": "^18.2.0"
       },

@@ -93,6 +93,12 @@
   {:db      (:db (reduce process-extension acc extensions))
    :plugins (rest plugins)})
 
+(defn- standard-loader
+  "Standard plugin loader that processes all extensions in order."
+  [db plugins]
+  (let [process-extensions-result
+        (reduce load-plugin {:db db :plugins plugins} plugins)]
+    (:db process-extensions-result)))
 
 ;; =============================================================================
 ;; Plugin Definition

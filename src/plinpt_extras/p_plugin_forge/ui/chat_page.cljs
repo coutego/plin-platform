@@ -70,33 +70,18 @@
        :after ""})))
 
 (defn syntax-highlight
-  "Apply syntax highlighting to ClojureScript code.
-   Returns HTML string with span elements for different token types.
-   Base text color should be light (set via parent element)."
+  "Apply syntax highlighting to ClojureScript code using highlight.js.
+   Returns HTML string with syntax highlighting applied."
   [code]
-  (-> code
-      ;; Escape HTML first
-      (str/replace #"&" "&amp;")
-      (str/replace #"<" "&lt;")
-      (str/replace #">" "&gt;")
-      ;; Comments - gray/muted
-      (str/replace #"(;[^\n]*)" 
-                   (fn [[_ m]] (str "<span class=\"text-slate-500\">" m "</span>")))
-      ;; Strings - green
-      (str/replace #"(\"(?:[^\"\\]|\\.)*\")" 
-                   (fn [[_ m]] (str "<span class=\"text-emerald-400\">" m "</span>")))
-      ;; Keywords - cyan
-      (str/replace #"(:[a-zA-Z0-9\-_\.\/\*\+\!\?]+)" 
-                   (fn [[_ m]] (str "<span class=\"text-cyan-400\">" m "</span>")))
-      ;; Boolean and nil - orange
-      (str/replace #"\b(true|false|nil)\b" 
-                   (fn [[_ m]] (str "<span class=\"text-orange-400\">" m "</span>")))
-      ;; Numbers - orange/yellow
-      (str/replace #"\b(\d+\.?\d*)\b" 
-                   (fn [[_ m]] (str "<span class=\"text-amber-300\">" m "</span>")))
-      ;; Special forms and macros - purple/magenta
-      (str/replace #"(?<![a-zA-Z0-9\-_])(ns|def|defn|defonce|defn-|fn|let|if|when|cond|case|do|loop|recur|try|catch|throw|for|doseq|dotimes|require|import|use|partial|atom|swap!|reset!|deref|and|or|not)(?![a-zA-Z0-9\-_])" 
-                   (fn [[_ m]] (str "<span class=\"text-fuchsia-400 font-semibold\">" m "</span>")))))
+  (try
+    (let [result (js/hljs.highlight code #js {:language "clojure"})]
+      (.-value result))
+    (catch :default _
+      ;; Fallback: just escape HTML if highlight.js fails
+      (-> code
+          (str/replace #"&" "&amp;")
+          (str/replace #"<" "&lt;")
+          (str/replace #">" "&gt;")))))
 
 (defn code-block [code]
   [:pre {:class "bg-slate-900 text-slate-300 p-4 rounded-lg overflow-x-auto text-xs font-mono mt-2"}
@@ -192,11 +177,12 @@
                    :d "M19 9l-7 7-7-7"}]]])]]
      
      ;; Code content - collapsible
-     ;; IMPORTANT: text-slate-300 sets the base/default text color for unhighlighted code
+     ;; Using hljs classes for syntax highlighting
      (when (or expanded? streaming?)
        [:div {:class "max-h-96 overflow-auto"}
-        [:pre {:class "p-3 text-xs font-mono leading-relaxed text-slate-300"}
-         [:code {:dangerouslySetInnerHTML {:__html (syntax-highlight code)}}]]])
+        [:pre {:class "p-3 text-xs font-mono leading-relaxed"}
+         [:code {:class "hljs language-clojure"
+                 :dangerouslySetInnerHTML {:__html (syntax-highlight code)}}]]])
      
      ;; Footer with Load button
      [:div {:class "flex items-center justify-between px-3 py-2 bg-slate-800 border-t border-slate-700"}

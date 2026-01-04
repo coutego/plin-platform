@@ -14,7 +14,7 @@
 ;; They receive the api as an argument from partial application
 
 (defn plugins-manage-view [api]
-  [plugins-ui/main-view (:state api) (:reload! api)])
+  [plugins-ui/main-view api])
 
 (defn plugins-graph-view [api]
   [plugin-graph/main-view (:state api)])

@@ -13,7 +13,9 @@
     "src/plin_platform",
     "libs",
     "public",
-    "bin"
+    "bin",
+    "README-JS.org",
+    "AGENTS-JS.org"
   ],
   "scripts": {
     "start": "node bin/generate-server-boot.js --run",

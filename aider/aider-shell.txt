@@ -1,0 +1,6 @@
+/read-only src/plinpt/i_app_shell.cljs
+/read-only src/plinpt/i_sidebar.cljs
+/read-only src/plinpt/i_breadcrumb.cljs
+/read-only src/plinpt/i_head_config.cljs
+/read-only src/plinpt/p_app_shell.cljs
+/read-only src/plinpt/p_app_shell/core.cljs

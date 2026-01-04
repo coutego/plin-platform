@@ -104,10 +104,6 @@
             // Skip config entries
             if (plugin.config) return false;
             
-            // Only load CLJS plugins (or unspecified type) via script tags
-            var isCljs = !plugin.type || plugin.type === 'cljs';
-            if (!isCljs) return false;
-            
             // Check envs: absent means "all environments"
             var envs = plugin.envs;
             var envMatch = !envs || envs.length === 0 || envs.indexOf(env) !== -1;
@@ -117,6 +113,12 @@
             var modeMatch = !modes || modes.length === 0 || modes.indexOf(mode) !== -1;
             
             return envMatch && modeMatch;
+        }
+        
+        // 4b. Check if plugin is a CLJS plugin (should be loaded via script tags)
+        function isCljsPlugin(plugin) {
+            // JS plugins have type: 'js', everything else is CLJS
+            return !plugin.type || plugin.type === 'cljs';
         }
         
         // Collect initially disabled plugin IDs
@@ -203,12 +205,17 @@
         window.INITIALLY_DISABLED_IDS = getInitiallyDisabledIds(window.SYSTEM_MANIFEST);
         
         // G. Filter plugins for current env/mode
-        var pluginsToLoad = window.SYSTEM_MANIFEST.filter(function(p) {
+        var allPluginsToLoad = window.SYSTEM_MANIFEST.filter(function(p) {
             return shouldLoadPlugin(p, window.APP_ENV, window.APP_MODE);
         });
         
+        // H. Separate CLJS and JS plugins
+        var cljsPluginsToLoad = allPluginsToLoad.filter(isCljsPlugin);
+        var jsPluginsToLoad = allPluginsToLoad.filter(function(p) { return !isCljsPlugin(p); });
+        
         console.log("📦 Manifest total:", window.SYSTEM_MANIFEST.length, 
-                    "| Loading:", pluginsToLoad.length,
+                    "| CLJS plugins:", cljsPluginsToLoad.length,
+                    "| JS plugins:", jsPluginsToLoad.length,
                     "| Initially disabled:", window.INITIALLY_DISABLED_IDS.length);
 
         // --- CONFIGURATION END ---
@@ -222,12 +229,14 @@
         load("libs/injectable/easy.cljc");
         load("libs/injectable/container.cljc");
         load("libs/injectable/core.cljc");
-        load("libs/plin/bean_redefs.cljc");
         load("libs/plin/core.cljc");
         load("libs/plin/boot.cljc");
+        
+        // Load JS Loader (needed for JS plugin support)
+        load("libs/plin/js_loader.cljs");
 
-        // Load Plugins Dynamically (already filtered by env/mode)
-        pluginsToLoad.forEach(function(plugin) {
+        // Load CLJS Plugins Dynamically (JS plugins are loaded via fetch in client_boot)
+        cljsPluginsToLoad.forEach(function(plugin) {
             plugin.files.forEach(function(file) {
                 load(file);
             });

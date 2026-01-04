@@ -1,0 +1,6 @@
+/read-only AGENTS.md
+/read-only src/plinpt/plin.edn
+/read-only src/plinpt/i_application.cljs
+/read-only src/plinpt/i_devdoc.cljs
+/read-only src/plinpt/i_ui_components.cljs
+/read-only src/plinpt/i_router.cljs

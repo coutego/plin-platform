@@ -13,10 +13,6 @@
   [:svg {:class "h-5 w-5 sidebar-icon" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
    [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"}]])
 
-(def icon-config
-  [:svg {:class "h-5 w-5 sidebar-icon" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
-   [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"}]])
-
 (def icon-beans
   [:svg {:class "h-5 w-5 sidebar-icon" :fill "none" :viewBox "0 0 24 24" :stroke "currentColor"}
    [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"}]])
@@ -34,10 +30,9 @@
     {::iapp/nav-items [::nav-sys-debug
                        ::nav-plugins-manage
                        ::nav-plugins-graph
-                       ::nav-plugins-config
                        ::nav-beans-inspect
                        ::nav-beans-graph
-                       ::nav-beans-config]
+                       ::nav-plugin-detail]
      
      ::idev-doc/plugins [{:id :debug
                           :description "System Debugger."
@@ -62,11 +57,6 @@
        :reagent-component true}
      [partial core/plugins-graph-view ::boot/api]
      
-     ::plugins-config-ui
-     ^{:doc "Plugin configuration view"
-       :reagent-component true}
-     [partial core/plugins-config-view ::boot/api]
-     
      ::beans-inspect-ui
      ^{:doc "Bean inspector view"
        :reagent-component true}
@@ -77,10 +67,11 @@
        :reagent-component true}
      [partial core/beans-graph-view ::boot/api]
      
-     ::beans-config-ui
-     ^{:doc "Bean configuration view"
+     ;; Plugin detail page (with route parameter)
+     ::plugin-detail-ui
+     ^{:doc "Plugin detail page showing full plugin information"
        :reagent-component true}
-     [partial core/beans-config-view ::boot/api]
+     [partial core/plugin-detail-view ::boot/api]
      
      ;; Navigation Items (Split to avoid nested vectors in contributions)
      
@@ -122,19 +113,20 @@
                        :order 2})
                     ::plugins-graph-ui]}
      
-     ::nav-plugins-config
+     ;; Plugin detail route - hidden from navigation, accessed only via links
+     ;; Uses :id parameter - the plugin ID is encoded with ~ instead of /
+     ::nav-plugin-detail
      {:constructor [(fn [ui]
-                      {:id :debug-plugins-config
+                      {:id :debug-plugin-detail
                        :parent-id :sys-debug
-                       :label "Configuration"
-                       :description "View raw plugin configuration."
-                       :route "plugin-config"
-                       :icon icon-config
-                       :icon-color "text-violet-600 bg-violet-50"
-                       :component ui
-                       :section "Plugins"
-                       :order 3})
-                    ::plugins-config-ui]}
+                       :label "Plugin Detail"
+                       :route "plugin/:id"
+                       :hidden true  ;; Hide from sidebar and auto-generated parent pages
+                       :component (fn [{:keys [id]}]
+                                    ;; id comes from route param, already has ~ encoding
+                                    [ui (or id "")])
+                       :order 999})
+                    ::plugin-detail-ui]}
      
      ::nav-beans-inspect
      {:constructor [(fn [ui]
@@ -162,18 +154,4 @@
                        :component ui
                        :section "Beans (Container)"
                        :order 11})
-                    ::beans-graph-ui]}
-     
-     ::nav-beans-config
-     {:constructor [(fn [ui]
-                      {:id :debug-beans-config
-                       :parent-id :sys-debug
-                       :label "Configuration"
-                       :description "View raw bean configuration."
-                       :route "bean-config"
-                       :icon icon-config
-                       :icon-color "text-fuchsia-600 bg-fuchsia-50"
-                       :component ui
-                       :section "Beans (Container)"
-                       :order 12})
-                    ::beans-config-ui]}}}))
+                    ::beans-graph-ui]}}}))

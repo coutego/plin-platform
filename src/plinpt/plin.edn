@@ -1,95 +1,204 @@
 [;; =============================================================================
- ;; Interfaces (no envs/modes = load everywhere, always)
+ ;; Interface plugins. By default, we load them everwhether since they are mostly no-op
  ;; =============================================================================
- {:id :plinpt.i-devdoc :files ["src/plinpt/i_devdoc.cljs"] :entry "plinpt.i-devdoc"}
- {:id :plinpt.i-router :files ["src/plinpt/i_router.cljs"] :entry "plinpt.i-router"}
- {:id :plinpt.i-application :files ["src/plinpt/i_application.cljs"] :entry "plinpt.i-application"}
- {:id :plinpt.i-sidebar :files ["src/plinpt/i_sidebar.cljs"] :entry "plinpt.i-sidebar"}
- {:id :plinpt.i-head-config :files ["src/plinpt/i_head_config.cljs"] :entry "plinpt.i-head-config"}
- {:id :plinpt.i-app-shell :files ["src/plinpt/i_app_shell.cljs"] :entry "plinpt.i-app-shell"}
- {:id :plinpt.i-breadcrumb :files ["src/plinpt/i_breadcrumb.cljs"] :entry "plinpt.i-breadcrumb"}
- {:id :plinpt.i-session :files ["src/plinpt/i_session.cljs"] :entry "plinpt.i-session"}
- {:id :plinpt.i-authorization :files ["src/plinpt/i_authorization.cljs"] :entry "plinpt.i-authorization"}
- {:id :plinpt.i-admin :files ["src/plinpt/i_admin.cljs"] :entry "plinpt.i-admin"}
- {:id :plinpt.i-admin-authorization :files ["src/plinpt/i_admin_authorization.cljs"] :entry "plinpt.i-admin-authorization"}
- {:id :plinpt.i-service-invoker :files ["src/plinpt/i_service_invoker.cljs"] :entry "plinpt.i-service-invoker"}
- {:id :plinpt.i-service-authorization :files ["src/plinpt/i_service_authorization.cljs"] :entry "plinpt.i-service-authorization"}
- {:id :plinpt.i-db :files ["src/plinpt/i_db.cljs"] :entry "plinpt.i-db"}
- {:id :plinpt.i-tracer :files ["src/plinpt/i_tracer.cljs"] :entry "plinpt.i-tracer"}
- {:id :plinpt.i-ui-components :files ["src/plinpt/i_ui_components.cljs"] :entry "plinpt.i-ui-components"}
- {:id :plinpt.i-devtools :files ["src/plinpt/i_devtools.cljs"] :entry "plinpt.i-devtools"}
- {:id :plinpt.i-dynamic-loader :files ["src/plinpt/i_dynamic_loader.cljs"] :entry "plinpt.i-dynamic-loader"}
- {:id :plinpt.i-development :files ["src/plinpt/i_development.cljs"] :entry "plinpt.i-development"}
- 
+ {:id :plinpt.i-devdoc
+  :files ["src/plinpt/i_devdoc.cljs"]
+  :entry "plinpt.i-devdoc"}
+
+ {:id :plinpt.i-router :files ["src/plinpt/i_router.cljs"]
+  :entry "plinpt.i-router"}
+
+ {:id :plinpt.i-application
+  :files ["src/plinpt/i_application.cljs"]
+  :entry "plinpt.i-application"}
+
+ {:id :plinpt.i-sidebar
+  :files ["src/plinpt/i_sidebar.cljs"]
+  :entry "plinpt.i-sidebar"}
+
+ {:id :plinpt.i-head-config
+  :files ["src/plinpt/i_head_config.cljs"]
+  :entry "plinpt.i-head-config"}
+
+ {:id :plinpt.i-app-shell
+  :files ["src/plinpt/i_app_shell.cljs"]
+  :entry "plinpt.i-app-shell"}
+
+ {:id :plinpt.i-breadcrumb
+  :files ["src/plinpt/i_breadcrumb.cljs"]
+  :entry "plinpt.i-breadcrumb"}
+
+ {:id :plinpt.i-session
+  :files ["src/plinpt/i_session.cljs"]
+  :entry "plinpt.i-session"}
+
+ {:id :plinpt.i-authorization
+  :files ["src/plinpt/i_authorization.cljs"]
+  :entry "plinpt.i-authorization"}
+
+ {:id :plinpt.i-admin
+  :files ["src/plinpt/i_admin.cljs"]
+  :entry "plinpt.i-admin"}
+
+ {:id :plinpt.i-admin-authorization
+  :files ["src/plinpt/i_admin_authorization.cljs"]
+  :entry "plinpt.i-admin-authorization"}
+
+ {:id :plinpt.i-service-invoker
+  :files ["src/plinpt/i_service_invoker.cljs"]
+  :entry "plinpt.i-service-invoker"}
+
+ {:id :plinpt.i-service-authorization
+  :files ["src/plinpt/i_service_authorization.cljs"]
+  :entry "plinpt.i-service-authorization"}
+
+ {:id
+  :plinpt.i-db :files ["src/plinpt/i_db.cljs"]
+  :entry "plinpt.i-db"}
+
+ {:id :plinpt.i-tracer
+  :files ["src/plinpt/i_tracer.cljs"]
+  :entry "plinpt.i-tracer"}
+
+ {:id :plinpt.i-ui-components
+  :files ["src/plinpt/i_ui_components.cljs"]
+  :entry "plinpt.i-ui-components"}
+
+ {:id :plinpt.i-devtools
+  :files ["src/plinpt/i_devtools.cljs"]
+  :entry "plinpt.i-devtools"}
+
+ {:id :plinpt.i-dynamic-loader
+  :files ["src/plinpt/i_dynamic_loader.cljs"]
+  :entry "plinpt.i-dynamic-loader"}
+
+ {:id :plinpt.i-development
+  :files ["src/plinpt/i_development.cljs"]
+  :entry "plinpt.i-development"}
+
+ {:id :plinpt.i-js-utils
+  :files ["src/plinpt/i_js_utils.cljs"]
+  :entry "plinpt.i-js-utils"}
+
  ;; =============================================================================
  ;; UI Implementations (browser only, all modes)
  ;; =============================================================================
  {:id :plinpt.p-head-config 
   :envs [:browser] 
-  :files ["src/plinpt/p_head_config/core.cljs" "src/plinpt/p_head_config.cljs"] 
+  :files ["src/plinpt/p_head_config/core.cljs"
+          "src/plinpt/p_head_config.cljs"]
   :entry "plinpt.p-head-config"}
+
  {:id :plinpt.p-hash-router 
   :envs [:browser] 
-  :files ["src/plinpt/p_hash_router/core.cljs" "src/plinpt/p_hash_router.cljs"] 
+  :files ["src/plinpt/p_hash_router/core.cljs"
+          "src/plinpt/p_hash_router.cljs"]
   :entry "plinpt.p-hash-router"}
+
  {:id :plinpt.p-app-shell 
   :envs [:browser] 
-  :files ["src/plinpt/p_app_shell/doc.cljs" "src/plinpt/p_app_shell/core.cljs" "src/plinpt/p_app_shell.cljs"] 
+  :files ["src/plinpt/p_app_shell/doc.cljs"
+          "src/plinpt/p_app_shell/core.cljs"
+          "src/plinpt/p_app_shell.cljs"]
   :entry "plinpt.p-app-shell"}
+
  {:id :plinpt.p-sidebar 
   :envs [:browser] 
-  :files ["src/plinpt/p_sidebar/core.cljs" "src/plinpt/p_sidebar.cljs"] 
+  :files ["src/plinpt/p_sidebar/core.cljs"
+          "src/plinpt/p_sidebar.cljs"]
   :entry "plinpt.p-sidebar"}
+
  {:id :plinpt.p-breadcrumb 
   :envs [:browser] 
-  :files ["src/plinpt/p_breadcrumb/core.cljs" "src/plinpt/p_breadcrumb.cljs"] 
+  :files ["src/plinpt/p_breadcrumb/core.cljs"
+          "src/plinpt/p_breadcrumb.cljs"]
   :entry "plinpt.p-breadcrumb"}
+
  {:id :plinpt.p-session 
   :envs [:browser] 
-  :files ["src/plinpt/p_session/utils.cljs" "src/plinpt/p_session/service.cljc" "src/plinpt/p_session/core.cljs" "src/plinpt/p_session.cljs"] 
+  :files ["src/plinpt/p_session/utils.cljs"
+          "src/plinpt/p_session/service.cljc"
+          "src/plinpt/p_session/core.cljs"
+          "src/plinpt/p_session.cljs"]
   :entry "plinpt.p-session"}
+
  {:id :plinpt.p-admin 
   :envs [:browser] 
-  :files ["src/plinpt/p_admin/core.cljs" "src/plinpt/p_admin.cljs"] 
+  :files ["src/plinpt/p_admin/core.cljs"
+          "src/plinpt/p_admin.cljs"]
   :entry "plinpt.p-admin"}
+
  {:id :plinpt.p-admin-authorization 
   :envs [:browser] 
-  :files ["src/plinpt/p_admin_authorization/core.cljs" "src/plinpt/p_admin_authorization.cljs"] 
+  :files ["src/plinpt/p_admin_authorization/core.cljs"
+          "src/plinpt/p_admin_authorization.cljs"]
   :entry "plinpt.p-admin-authorization"}
+
  {:id :plinpt.p-ui-components 
   :envs [:browser] 
-  :files ["src/plinpt/p_ui_components/core.cljs" "src/plinpt/p_ui_components.cljs"] 
+  :files ["src/plinpt/p_ui_components/core.cljs"
+          "src/plinpt/p_ui_components.cljs"]
   :entry "plinpt.p-ui-components"}
+
  {:id :plinpt.p-devdoc
   :envs [:browser]
-  :files ["src/plinpt/p_devdoc/core.cljs" "src/plinpt/p_devdoc.cljs"] 
+  :files ["src/plinpt/p_devdoc/core.cljs"
+          "src/plinpt/p_devdoc.cljs"]
   :entry "plinpt.p-devdoc"}
+
  {:id :plinpt.p-devtools 
   :envs [:browser] 
-  :files ["src/plinpt/p_devtools/core.cljs" "src/plinpt/p_devtools.cljs"] 
+  :files ["src/plinpt/p_devtools/core.cljs"
+          "src/plinpt/p_devtools.cljs"]
   :entry "plinpt.p-devtools"}
+
  {:id :plinpt.p-development
   :enabled false
   :envs [:browser]
-  :files ["src/plinpt/p_development/core.cljs" "src/plinpt/p_development.cljs"]
+  :files ["src/plinpt/p_development/core.cljs"
+          "src/plinpt/p_development.cljs"]
   :entry "plinpt.p-development"}
+
  {:id :plinpt.p-dynamic-loader 
   :envs [:browser] 
-  :files ["src/plinpt/p_dynamic_loader/core.cljs" "src/plinpt/p_dynamic_loader.cljs"] 
+  :files ["src/plinpt/p_dynamic_loader/core.cljs"
+          "src/plinpt/p_dynamic_loader.cljs"]
   :entry "plinpt.p-dynamic-loader"}
+
  {:id :plinpt.p-tracer 
   :envs [:browser] 
-  :files ["src/plinpt/p_tracer/core.cljs" "src/plinpt/p_tracer/ui.cljs" "src/plinpt/p_tracer.cljs"] 
+  :files ["src/plinpt/p_tracer/core.cljs"
+          "src/plinpt/p_tracer/ui.cljs"
+          "src/plinpt/p_tracer.cljs"]
   :entry "plinpt.p-tracer"}
+
  {:id :plinpt.p-schema-visualizer 
   :envs [:browser] 
-  :files ["src/plinpt/p_schema_visualizer/core.cljs" "src/plinpt/p_schema_visualizer/ui.cljs" "src/plinpt/p_schema_visualizer.cljs"] 
+  :files ["src/plinpt/p_schema_visualizer/core.cljs"
+          "src/plinpt/p_schema_visualizer/ui.cljs"
+          "src/plinpt/p_schema_visualizer.cljs"]
   :entry "plinpt.p-schema-visualizer"}
+
  {:id :plinpt.p-debug 
   :envs [:browser] 
-  :files ["src/plinpt/p_debug/common.cljs" "src/plinpt/p_debug/raw_view.cljs" "src/plinpt/p_debug/plugins_ui.cljs" "src/plinpt/p_debug/plugin_graph.cljs" "src/plinpt/p_debug/beans_ui.cljs" "src/plinpt/p_debug/bean_graph.cljs" "src/plinpt/p_debug/core.cljs" "src/plinpt/p_debug.cljs"] 
+  :files ["src/plinpt/p_debug/common.cljs"
+          "src/plinpt/p_debug/raw_view.cljs"
+          "src/plinpt/p_debug/plugins_ui.cljs"
+          "src/plinpt/p_debug/plugin_graph.cljs"
+          "src/plinpt/p_debug/plugin_detail.cljs"
+          "src/plinpt/p_debug/beans_ui.cljs"
+          "src/plinpt/p_debug/bean_graph.cljs"
+          "src/plinpt/p_debug/core.cljs"
+          "src/plinpt/p_debug.cljs"]
   :entry "plinpt.p-debug"}
- {:id :plinpt.p-client-boot 
+
+ {:id :plinpt.p-js-utils
+  :envs [:browser]
+  :files ["src/plinpt/p_js_utils/core.cljs"
+          "src/plinpt/p_js_utils.cljs"]
+  :entry "plinpt.p-js-utils"}
+
+ {:id :plinpt.p-client-boot
   :envs [:browser] 
   :files ["src/plinpt/p_client_boot.cljs"] 
   :entry "plinpt.p-client-boot"}
@@ -101,27 +210,36 @@
  {:id :plinpt.p-alasql-db 
   :envs [:browser] 
   :modes [:demo] 
-  :files ["src/plinpt/p_alasql_db/core.cljs" "src/plinpt/p_alasql_db.cljs"] 
+  :files ["src/plinpt/p_alasql_db/core.cljs"
+          "src/plinpt/p_alasql_db.cljs"]
   :entry "plinpt.p-alasql-db"}
+
  {:id :plinpt.p-alasql-explorer 
   :envs [:browser] 
   :modes [:demo] 
-  :files ["src/plinpt/p_alasql_explorer/core.cljs" "src/plinpt/p_alasql_explorer.cljs"] 
+  :files ["src/plinpt/p_alasql_explorer/core.cljs"
+          "src/plinpt/p_alasql_explorer.cljs"]
   :entry "plinpt.p-alasql-explorer"}
+
  {:id :plinpt.p-service-invoker-demo 
   :envs [:browser] 
   :modes [:demo] 
-  :files ["src/plinpt/p_service_invoker_demo/core.cljs" "src/plinpt/p_service_invoker_demo.cljs"] 
+  :files ["src/plinpt/p_service_invoker_demo/core.cljs"
+          "src/plinpt/p_service_invoker_demo.cljs"]
   :entry "plinpt.p-service-invoker-demo"}
+
  {:id :plinpt.p-service-authorization 
   :envs [:browser] 
   :modes [:demo] 
-  :files ["src/plinpt/p_service_authorization/core.cljs" "src/plinpt/p_service_authorization.cljs"] 
+  :files ["src/plinpt/p_service_authorization/core.cljs"
+          "src/plinpt/p_service_authorization.cljs"]
   :entry "plinpt.p-service-authorization"}
+
  {:id :plinpt.p-db-tools 
   :envs [:browser] 
   :modes [:demo] 
-  :files ["src/plinpt/p_db_tools/core.cljs" "src/plinpt/p_db_tools.cljs"] 
+  :files ["src/plinpt/p_db_tools/core.cljs"
+          "src/plinpt/p_db_tools.cljs"]
   :entry "plinpt.p-db-tools"}
 
  ;; =============================================================================
@@ -152,6 +270,54 @@
   :envs [:browser]
   :files ["src/plinpt_extras/p_command_palette.cljs"]
   :entry "plinpt-extras.p-command-palette"}
+
+ ;; =============================================================================
+ ;; Showcase Plugins (browser only, disabled by default)
+ ;; =============================================================================
+ {:id :plinpt-extras.showcase.cellular-automata
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/cellular_automata.cljs"]
+  :entry "plinpt-extras.showcase.cellular-automata"}
+
+ {:id :plinpt-extras.showcase.snake
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/snake.cljs"]
+  :entry "plinpt-extras.showcase.snake"}
+
+ {:id :plinpt-extras.showcase.fancy-shell
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/fancy_shell.cljs"]
+  :entry "plinpt-extras.showcase.fancy-shell"}
+
+ {:id :plinpt-extras.showcase.hn-shell
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/hn_shell.cljs"]
+  :entry "plinpt-extras.showcase.hn-shell"}
+
+ ;; =============================================================================
+ ;; Showcase JavaScript Plugins (browser only, disabled by default)
+ ;; =============================================================================
+ {:id :plinpt-extras.showcase.game-2048
+  :type :js
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/game_2048.js"]}
+
+ {:id :plinpt-extras.showcase.plugin-inspector
+  :type :js
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/plugin_inspector.js"]}
+
+ {:id :plinpt-extras.showcase.system-monitor
+  :type :js
+  :envs [:browser]
+  :enabled false
+  :files ["src/plinpt_extras/showcase/system_monitor.js"]}
 
  ;; =============================================================================
  ;; Server Implementation (node only)

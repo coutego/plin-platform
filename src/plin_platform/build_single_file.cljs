@@ -19,7 +19,7 @@
 (def current-env "browser")
 (def current-mode "demo")
 
-(defn generate-template-html [head-config initially-disabled-ids]
+(defn generate-template-html [head-config initially-disabled-ids js-plugin-scripts]
   (let [;; Generate script tags from config
         script-tags (when-let [scripts (:scripts head-config)]
                       (str/join "\n    "
@@ -119,7 +119,13 @@
       window.APP_MODE = \"" current-mode "\";
       window.APP_ENV = \"" current-env "\";
       window.INITIALLY_DISABLED_IDS = " disabled-ids-json ";
+      
+      // Storage for embedded JS plugins (loaded synchronously before CLJS)
+      window.__PLIN_EMBEDDED_JS_PLUGINS__ = {};
     </script>
+
+    <!-- Embedded JS Plugins -->
+" js-plugin-scripts "
 
     <!-- Application Code -->
     <script type=\"application/x-scittle\">
@@ -268,6 +274,22 @@
    (let [modes (:modes item)]
      (or (nil? modes) (empty? modes) (some #{(keyword mode)} (map keyword modes))))))
 
+(defn is-js-plugin?
+  "Check if a manifest entry is a JS plugin."
+  [item]
+  (= :js (:type item)))
+
+(defn is-cljs-plugin?
+  "Check if a manifest entry is a CLJS plugin (or unspecified type)."
+  [item]
+  (let [t (:type item)]
+    (or (nil? t) (= :cljs t))))
+
+(defn is-enabled?
+  "Check if a manifest entry is enabled (not explicitly disabled)."
+  [item]
+  (not (false? (:enabled item))))
+
 (defn get-initially-disabled-ids [manifest]
   (->> manifest
        (filter #(= (:enabled %) false))
@@ -275,12 +297,74 @@
        (remove nil?)
        set))
 
-(defn get-manifest-files []
-  (let [manifest (get-manifest)]
-    (->> manifest
-         (filter #(should-load-plugin? % current-env current-mode))
-         (mapcat :files)
-         vec)))
+(defn get-cljs-manifest-files
+  "Get files from CLJS plugins that should be loaded."
+  [manifest env mode]
+  (->> manifest
+       (filter #(should-load-plugin? % env mode))
+       (filter is-cljs-plugin?)
+       (mapcat :files)
+       vec))
+
+(defn get-js-plugin-entries
+  "Get JS plugin manifest entries that should be loaded."
+  [manifest env mode]
+  (->> manifest
+       (filter #(should-load-plugin? % env mode))
+       (filter is-js-plugin?)
+       (filter is-enabled?)
+       vec))
+
+(defn escape-js-for-html
+  "Escape JS code for embedding in HTML script tags."
+  [code]
+  ;; Escape </script> to prevent breaking out of script tag
+  (str/replace code "</script>" "<\\/script>"))
+
+(defn generate-embedded-js-plugin
+  "Generate a script tag that embeds a JS plugin.
+   The plugin code is wrapped to store its result in window.__PLIN_EMBEDDED_JS_PLUGINS__"
+  [entry]
+  (let [id (name (:id entry))
+        files (:files entry)
+        file-path (first files)]
+    (when file-path
+      (try
+        (let [code (read-file file-path)
+              escaped-code (escape-js-for-html code)
+              ;; Create a safe key for the plugin (replace special chars)
+              safe-key (str/replace id #"[^a-zA-Z0-9_]" "_")]
+          (str "    <script>\n"
+               "      // Embedded JS Plugin: " id "\n"
+               "      (function() {\n"
+               "        try {\n"
+               "          var pluginDef = (function() {\n"
+               escaped-code "\n"
+               "          })();\n"
+               "          window.__PLIN_EMBEDDED_JS_PLUGINS__['" safe-key "'] = {\n"
+               "            id: '" id "',\n"
+               "            def: pluginDef,\n"
+               "            files: ['" file-path "']\n"
+               "          };\n"
+               "          console.log('Embedded JS plugin loaded: " id "');\n"
+               "        } catch (e) {\n"
+               "          console.error('Failed to load embedded JS plugin: " id "', e);\n"
+               "        }\n"
+               "      })();\n"
+               "    </script>\n"))
+        (catch :default e
+          (println "Warning: Could not read JS plugin file:" file-path (.-message e))
+          nil)))))
+
+(defn generate-all-js-plugin-scripts
+  "Generate all embedded JS plugin script tags."
+  [js-entries]
+  (if (empty? js-entries)
+    ""
+    (let [scripts (->> js-entries
+                       (map generate-embedded-js-plugin)
+                       (remove nil?))]
+      (str/join "\n" scripts))))
 
 (defn -main [& args]
   (println "Building single file application (via nbb)...")
@@ -301,20 +385,26 @@
               "libs/injectable/easy.cljc"
               "libs/injectable/container.cljc"
               "libs/injectable/core.cljc"
-              "libs/plin/bean_redefs.cljc"
               "libs/plin/core.cljc"
-              "libs/plin/boot.cljc"]
-        plugins (get-manifest-files)
+              "libs/plin/boot.cljc"
+              "libs/plin/js_loader.cljs"]
+        
+        manifest-data (get-manifest)
+        cljs-plugins (get-cljs-manifest-files manifest-data current-env current-mode)
+        js-entries (get-js-plugin-entries manifest-data current-env current-mode)
         main-entry ["src/plin_platform/client_boot.cljs"]
         
-        all-files (concat libs plugins main-entry)
+        all-cljs-files (concat libs cljs-plugins main-entry)
         
         head-config (get-head-config)
-        manifest-data (get-manifest)
-        initially-disabled-ids (get-initially-disabled-ids manifest-data)]
+        initially-disabled-ids (get-initially-disabled-ids manifest-data)
+        
+        ;; Generate embedded JS plugin scripts
+        js-plugin-scripts (generate-all-js-plugin-scripts js-entries)]
     
     (println "")
-    (println "Found" (count all-files) "files to include.")
+    (println "Found" (count all-cljs-files) "CLJS files to include.")
+    (println "Found" (count js-entries) "JS plugins to embed.")
     (when head-config
       (println "Head config detected:" (pr-str head-config)))
     (when (seq initially-disabled-ids)
@@ -324,12 +414,12 @@
                             (map (fn [f] 
                                    (str ";; File: " f "\n"
                                         (read-file f)))
-                                 all-files))
+                                 all-cljs-files))
           safe-content (str/replace content "</script>" "<\\u002fscript>")
           
           manifest-json (js/JSON.stringify (clj->js manifest-data))
           
-          template-html (generate-template-html head-config initially-disabled-ids)
+          template-html (generate-template-html head-config initially-disabled-ids js-plugin-scripts)
           
           final-html (-> template-html
                          (str/replace "__CONTENT__" safe-content)

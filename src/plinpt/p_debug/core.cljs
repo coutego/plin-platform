@@ -3,6 +3,7 @@
             [plinpt.p-debug.common :as common]
             [plinpt.p-debug.plugins-ui :as plugins-ui]
             [plinpt.p-debug.plugin-graph :as plugin-graph]
+            [plinpt.p-debug.plugin-detail :as plugin-detail]
             [plinpt.p-debug.beans-ui :as beans-ui]
             [plinpt.p-debug.bean-graph :as bean-graph]
             [plinpt.p-debug.raw-view :as raw-view]))
@@ -19,13 +20,6 @@
 (defn plugins-graph-view [api]
   [plugin-graph/main-view (:state api)])
 
-(defn plugins-config-view [api]
-  (let [all-plugins (:all-plugins @(:state api))]
-    [raw-view/main-view all-plugins "Plugin Configuration" "Raw EDN definition of all loaded plugins."
-     {:segmented? true
-      :header-fn #(str "Plugin: " (:id %))
-      :content-fn identity}]))
-
 (defn beans-inspect-view [api]
   (let [state @(:state api)]
     [beans-ui/main-view (:container state) (:all-plugins state)]))
@@ -33,13 +27,10 @@
 (defn beans-graph-view [api]
   [bean-graph/main-view (:state api)])
 
-(defn beans-config-view [api]
-  (let [container (:container @(:state api))
-        definitions (get container :plin.core/definitions)]
-    [raw-view/main-view definitions "Bean Definitions" "Bean definitions captured during container creation."
-     {:segmented? true
-      :header-fn #(str "Bean: " (first %))
-      :content-fn second}]))
+;; --- Plugin Detail Page ---
+
+(defn plugin-detail-view [api plugin-id]
+  [plugin-detail/plugin-detail-page api plugin-id])
 
 ;; --- Landing Page ---
 

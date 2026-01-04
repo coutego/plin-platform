@@ -1,4 +1,4 @@
-(ns showcase.fancy-shell
+(ns plinpt-extras.showcase.fancy-shell
   (:require [reagent.core :as r]
             [clojure.string :as str]
             [plin.core :as plin]
@@ -83,13 +83,11 @@
     [:aside {:class (str "fixed left-0 top-0 h-full bg-black border-r border-green-900/50 flex flex-col z-40 transition-all duration-300 "
                          (if open? "w-64" "w-0 overflow-hidden"))}
      
-     ;; Header
      [:div {:class "p-4 border-b border-green-900/30"}
       [ascii-logo]
       [:div {:class "mt-3"}
        [terminal-prompt]]]
      
-     ;; Navigation
      [:nav {:class "flex-1 py-4 overflow-y-auto overflow-x-hidden scrollbar-thin"}
       [:div {:class "px-4 mb-2 text-[10px] font-mono text-green-800 uppercase tracking-widest"} 
        "// navigation"]
@@ -98,7 +96,6 @@
          ^{:key (:id item)}
          [nav-item item current-path navigate!]))]
      
-     ;; User Section
      [:div {:class "p-4 border-t border-green-900/30 bg-green-950/20"}
       [:div {:class "text-[10px] font-mono text-green-800 uppercase tracking-widest mb-2"} 
        "// session"]
@@ -117,7 +114,6 @@
                   :class "w-full px-3 py-1.5 font-mono text-xs border border-green-700 text-green-500 hover:bg-green-900/30 hover:text-green-400 transition-all"}
          "[authenticate]"])]
      
-     ;; Footer
      [:div {:class "p-4 border-t border-green-900/30"}
       [:div {:class "font-mono text-[10px] text-green-900"}
        "sys.version: 0.1.0"
@@ -183,21 +179,16 @@
             sidebar-open? (:sidebar-open? @shell-state)]
         [:div {:class "min-h-screen bg-black text-gray-300 font-sans"}
          
-         ;; Scanline effect
          [scanline-overlay]
          
-         ;; Sidebar
          [sidebar structure path navigate! user-data user-actions]
          
-         ;; Toggle button (visible when sidebar closed)
          (when-not sidebar-open?
            [toggle-button])
          
-         ;; Main area
          [:div {:class (str "min-h-screen flex flex-col transition-all duration-300 "
                             (if sidebar-open? "ml-64" "ml-0"))}
           
-          ;; Header bar
           [:header {:class "h-12 bg-black border-b border-green-900/30 flex items-center justify-between px-4"}
            (when sidebar-open?
              [:button {:on-click #(swap! shell-state update :sidebar-open? not)
@@ -207,13 +198,10 @@
            [:div {:class "font-mono text-xs text-gray-700"}
             "PLIN PLATFORM // UNDERGROUND EDITION"]]
           
-          ;; Content
           [main-content current-route can?]]
          
-         ;; Login Modal
          (when login-modal [login-modal])
          
-         ;; Overlays
          (for [[idx comp] (map-indexed vector overlays)]
            ^{:key idx} [comp])]))}))
 
@@ -234,7 +222,6 @@
     animation: glitch 0.1s ease-in-out;
   }
   
-  /* Custom scrollbar for hacker theme */
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
   }
@@ -249,7 +236,6 @@
     background: #22c55e;
   }
   
-  /* Terminal cursor blink */
   @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
@@ -263,13 +249,10 @@
     
     :contributions
     {::ihead/inline-styles [custom-styles]
-     
-     ;; Override the main application UI with our hacker shell
      ::iapp/ui ::ui}
     
     :beans
-    {;; The hacker shell component
-     ::ui
+    {::ui
      ^{:doc "Hacker Shell UI component."
        :reagent-component true}
      [partial hacker-shell

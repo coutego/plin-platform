@@ -1,0 +1,8 @@
+/read-only src/plinpt/i_session.cljs
+/read-only src/plinpt/i_authorization.cljs
+/read-only src/plinpt/i_service_invoker.cljs
+/read-only src/plinpt/i_db.cljs
+/read-only src/plinpt/i_admin.cljs
+/read-only src/plinpt/i_devtools.cljs
+/read-only src/plinpt/i_head_config.cljs
+/read-only src/plinpt/i_tracer.cljs

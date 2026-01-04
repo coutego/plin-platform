@@ -50,7 +50,7 @@
       (when-not strict?
         (let [root-val (get plugin key)]
           (when (not (nil? root-val))
-            (println "WARNING: Extension" key "found at root of plugin" (:id plugin) 
+            #_(println "WARNING: Extension" key "found at root of plugin" (:id plugin)
                      "- please move to :contributions")
             root-val))))))
 

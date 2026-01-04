@@ -8,7 +8,7 @@
   [:map
    [:id keyword?]
    [:doc {:optional true} string?]
-   [:deps {:optional true} [:sequential keyword?]]
+   [:deps {:optional true} [:sequential [:or keyword? map? string?]]]
    [:loader {:optional true} fn?]])
 
 (def plugins-schema
@@ -17,33 +17,60 @@
 (defn- crash [msg] (throw (ex-info msg {:cause msg})))
 (defn- crash-if [condition msg] (when condition (crash msg)))
 
-(defn- make-plugin-list [plugin parents loaded]
+(defn normalize-dep
+  "Normalizes a dependency to a keyword ID.
+   Accepts: keyword, plugin map, or string.
+   
+   Examples:
+   - :plinpt.i-application/plugin -> :plinpt.i-application/plugin
+   - {:id :plinpt.i-application/plugin ...} -> :plinpt.i-application/plugin
+   - \"plinpt.i-application\" -> :plinpt.i-application/plugin"
+  [dep]
   (cond
-    (contains? (set loaded) plugin)
-    loaded
+    (keyword? dep) dep
+    (map? dep) (:id dep)
+    (string? dep) (keyword dep "plugin")
+    :else (throw (ex-info (str "Invalid dependency format: " dep) {:dep dep}))))
 
-    (contains? (set parents) (:id plugin))
-    (crash (str "Cyclic dependencies: "
-                (:id plugin)
-                " depends on itself through "
-                (str/join parents ", ")))
+(defn- make-plugin-list [plugin parents loaded plugins-by-id]
+  (let [plugin-id (:id plugin)]
+    (cond
+      (contains? (set (map :id loaded)) plugin-id)
+      loaded
 
-    :else
-    (let [deps (:deps plugin)
-          trans-deps
-          (reduce (fn [acc dep]
-                    (make-plugin-list dep (conj parents (:id plugin)) acc))
-                  loaded
-                  (or deps []))]
-      (conj trans-deps plugin))))
+      (contains? (set parents) plugin-id)
+      (crash (str "Cyclic dependencies: "
+                  plugin-id
+                  " depends on itself through "
+                  (str/join ", " parents)))
+
+      :else
+      (let [dep-ids (map normalize-dep (or (:deps plugin) []))
+            trans-deps
+            (reduce (fn [acc dep-id]
+                      (if-let [dep-plugin (get plugins-by-id dep-id)]
+                        (make-plugin-list dep-plugin (conj parents plugin-id) acc plugins-by-id)
+                        ;; Dependency not found in current plugin set - skip
+                        ;; This allows for optional dependencies or deps satisfied later
+                        acc))
+                    loaded
+                    dep-ids)]
+        (conj trans-deps plugin)))))
 
 (defn process-plugin-deps
   "Ensures that dependencies are loaded in the right order, returning the list
    of plugins (which can be longer than the original one, because of declared
-   dependencies). It throws an exception if cyclic dependencies are found."
+   dependencies). It throws an exception if cyclic dependencies are found.
+   
+   Dependencies can be specified as:
+   - Keyword IDs: :plinpt.i-application/plugin
+   - Plugin maps: {:id :plinpt.i-application/plugin ...}
+   - Strings: \"plinpt.i-application\" (converted to :plinpt.i-application/plugin)"
   [plugins]
-  (let [super-plugin {:id ::meta-plugin, :deps plugins}
-        ret          (butlast (make-plugin-list super-plugin [] []))
+  ;; Build ID -> plugin lookup map
+  (let [plugins-by-id (into {} (map (juxt :id identity) plugins))
+        super-plugin {:id ::meta-plugin, :deps (map :id plugins)}
+        ret          (butlast (make-plugin-list super-plugin [] [] plugins-by-id))
         ids          (map :id ret)
         dup          (->> ids frequencies (filter #(> (second %) 1)))]
     (crash-if (> (count dup) 0)

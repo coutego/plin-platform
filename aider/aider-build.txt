@@ -1,0 +1,8 @@
+/read-only package.json
+/read-only bin/create-plin-app.js
+/read-only bin/generate-server-boot.js
+/read-only src/plin_platform/build_single_file.cljs
+/read-only src/plin_platform/server_boot.cljs
+/read-only src/plin_platform/server.cljs
+/read-only src/plin_platform/client_boot.cljs
+/read-only nbb.edn

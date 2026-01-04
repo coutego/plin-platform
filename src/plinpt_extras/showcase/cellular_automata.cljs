@@ -1,4 +1,4 @@
-(ns showcase.cellular-automata
+(ns plinpt-extras.showcase.cellular-automata
   (:require [reagent.core :as r]
             [plin.core :as plin]
             [plinpt.i-application :as iapp]))
@@ -7,7 +7,7 @@
 
 (def rows 60)
 (def cols 80)
-(def cell-size 5) ;; Reduced size for finer grid
+(def cell-size 5)
 
 ;; --- Logic: Common ---
 
@@ -29,7 +29,7 @@
             0
             deltas)))
 
-;; --- Logic: Game of Life & HighLife ---
+;; --- Logic: Life-like Automata ---
 
 (defn next-gen-life [grid rule-b rule-s]
   (vec (map-indexed 
@@ -43,41 +43,43 @@
                 row)))
         grid)))
 
+;; Game of Life: B3/S23
 (defn step-gol [state]
   (update state :grid next-gen-life #{3} #{2 3}))
 
+;; HighLife: B36/S23 - Known for replicators
 (defn step-highlife [state]
   (update state :grid next-gen-life #{3 6} #{2 3}))
+
+;; Day & Night: B3678/S34678 - Complex behavior similar to Game of Life
+(defn step-day-night [state]
+  (update state :grid next-gen-life #{3 6 7 8} #{3 4 6 7 8}))
+
+;; Seeds: B2/S(none) - Very chaotic and explosive
+(defn step-seeds [state]
+  (update state :grid next-gen-life #{2} #{}))
+
+;; Maze: B3/S12345 - Generates maze-like structures
+(defn step-maze [state]
+  (update state :grid next-gen-life #{3} #{1 2 3 4 5}))
 
 ;; --- Logic: Langton's Ant ---
 
 (defn step-ant [state]
   (let [{:keys [grid ant]} state
         {:keys [x y dir]} ant
-        
-        ;; Current cell color (0 or 1)
         current-color (get-in grid [y x])
-        
-        ;; 1. Turn: Right (1) if 0, Left (-1) if 1
-        ;; N(0) -> E(1) -> S(2) -> W(3)
         turn (if (zero? current-color) 1 -1)
         new-dir (mod (+ dir turn) 4)
-        
-        ;; 2. Flip color
         new-color (if (zero? current-color) 1 0)
         new-grid (assoc-in grid [y x] new-color)
-        
-        ;; 3. Move
         [dx dy] (case new-dir
-                  0 [0 -1] ;; N
-                  1 [1 0]  ;; E
-                  2 [0 1]  ;; S
-                  3 [-1 0] ;; W
-                  )
-        
+                  0 [0 -1]
+                  1 [1 0]
+                  2 [0 1]
+                  3 [-1 0])
         new-x (mod (+ x dx) cols)
         new-y (mod (+ y dy) rows)]
-    
     (-> state
         (assoc :grid new-grid)
         (assoc :ant {:x new-x :y new-y :dir new-dir}))))
@@ -114,36 +116,57 @@
 ;; --- Drawing Helpers ---
 
 (defn draw-ant [ctx state cell-size]
-  (set! (.-fillStyle ctx) "#f43f5e") ;; Rose-500
+  (set! (.-fillStyle ctx) "#f43f5e")
   (let [{:keys [x y]} (:ant state)]
     (.fillRect ctx (* x cell-size) (* y cell-size) (dec cell-size) (dec cell-size))))
 
 ;; --- Automata Definitions ---
 
-(def gol-def
-  {:id :gol
-   :label "Game of Life"
-   :step step-gol
-   :init seed-random
-   :extra-actions [{:label "Random Seed" :fn seed-random}]})
-
-(def highlife-def
-  {:id :highlife
-   :label "HighLife (Replicator)"
-   :step step-highlife
-   :init seed-random
-   :extra-actions [{:label "Random Seed" :fn seed-random}
-                   {:label "Spawn Replicator" :fn seed-replicator}]})
-
-(def ant-def
-  {:id :ant
-   :label "Langton's Ant"
-   :step step-ant
-   :init seed-empty
-   :draw-extra draw-ant
-   :extra-actions [{:label "Reset Center" :fn seed-empty}]})
-
-(def default-automata [gol-def highlife-def ant-def])
+(def automata-defs
+  [{:id :gol
+    :label "Game of Life"
+    :description "Classic B3/S23 rule"
+    :step step-gol
+    :init seed-random
+    :extra-actions [{:label "Random Seed" :fn seed-random}]}
+   
+   {:id :highlife
+    :label "HighLife"
+    :description "B36/S23 - Known for replicators"
+    :step step-highlife
+    :init seed-random
+    :extra-actions [{:label "Random Seed" :fn seed-random}
+                    {:label "Spawn Replicator" :fn seed-replicator}]}
+   
+   {:id :day-night
+    :label "Day & Night"
+    :description "B3678/S34678 - Complex symmetric behavior"
+    :step step-day-night
+    :init seed-random
+    :extra-actions [{:label "Random Seed" :fn seed-random}]}
+   
+   {:id :seeds
+    :label "Seeds"
+    :description "B2/S(none) - Chaotic and explosive"
+    :step step-seeds
+    :init seed-empty
+    :extra-actions [{:label "Clear (Draw manually)" :fn seed-empty}
+                    {:label "Random Seed" :fn seed-random}]}
+   
+   {:id :maze
+    :label "Maze"
+    :description "B3/S12345 - Generates maze-like structures"
+    :step step-maze
+    :init seed-random
+    :extra-actions [{:label "Random Seed" :fn seed-random}]}
+   
+   {:id :ant
+    :label "Langton's Ant"
+    :description "Simple rules, emergent complexity"
+    :step step-ant
+    :init seed-empty
+    :draw-extra draw-ant
+    :extra-actions [{:label "Reset Center" :fn seed-empty}]}])
 
 ;; --- State ---
 
@@ -155,7 +178,7 @@
                :step-fn step-gol
                :init-fn seed-random
                :draw-extra-fn nil
-               :extra-actions (:extra-actions gol-def)
+               :extra-actions (:extra-actions (first automata-defs))
                :ant {:x (quot cols 2) :y (quot rows 2) :dir 0}
                :generation 0
                :speed 100}
@@ -196,7 +219,6 @@
          :draw-extra-fn (:draw-extra automaton-def)
          :extra-actions (:extra-actions automaton-def)
          :running? false)
-  ;; Initialize
   (when-let [init (:init automaton-def)]
     (swap! app-state init)))
 
@@ -216,22 +238,15 @@
   (let [ctx (.getContext canvas "2d")
         state @app-state
         {:keys [grid draw-extra-fn dark-mode?]} state
-        
-        bg-color (if dark-mode? "#1e293b" "#f8fafc") ;; Slate-800 vs Slate-50
-        cell-color (if dark-mode? "#38bdf8" "#0ea5e9")] ;; Sky-400 vs Sky-500
-          
-    ;; Clear
+        bg-color (if dark-mode? "#1e293b" "#f8fafc")
+        cell-color (if dark-mode? "#38bdf8" "#0ea5e9")]
     (set! (.-fillStyle ctx) bg-color)
     (.fillRect ctx 0 0 (.-width canvas) (.-height canvas))
-    
-    ;; Draw Cells
     (set! (.-fillStyle ctx) cell-color)
     (doseq [r (range rows)
             c (range cols)]
       (when (pos? (get-in grid [r c]))
         (.fillRect ctx (* c cell-size) (* r cell-size) (dec cell-size) (dec cell-size))))
-    
-    ;; Draw Extra (e.g. Ant)
     (when draw-extra-fn
       (draw-extra-fn ctx state cell-size))))
 
@@ -239,16 +254,16 @@
   (let [canvas-ref (r/atom nil)]
     (r/create-class
      {:component-did-mount
-      (fn [this]
+      (fn [_this]
         (when @canvas-ref (draw @canvas-ref)))
       
       :component-did-update
-      (fn [this]
+      (fn [_this]
         (when @canvas-ref (draw @canvas-ref)))
       
       :reagent-render
       (fn []
-        @app-state ;; Subscribe
+        @app-state
         [:canvas {:width (* cols cell-size)
                   :height (* rows cell-size)
                   :class "border border-slate-300 dark:border-slate-700 rounded shadow-lg cursor-pointer"
@@ -261,33 +276,29 @@
                                     r (int (/ y cell-size))]
                                 (swap! app-state update-in [:grid r c] #(if (zero? %) 1 0))))}])})))
 
-(defn controls [automata-list]
+(defn controls []
   (let [{:keys [running? mode generation speed extra-actions dark-mode?]} @app-state]
     [:div {:class "flex flex-col gap-4 mb-6 p-4 bg-white rounded-lg shadow"}
      [:div {:class "flex flex-wrap items-center gap-4"}
-      ;; Mode Select
       [:select {:class "px-3 py-2 border rounded bg-gray-50"
                 :value (name mode)
                 :on-change (fn [e]
                              (let [val (.. e -target -value)
-                                   def (some #(when (= (name (:id %)) val) %) automata-list)]
+                                   def (some #(when (= (name (:id %)) val) %) automata-defs)]
                                (when def (switch-mode def))))}
-       (for [a automata-list]
+       (for [a automata-defs]
          ^{:key (:id a)}
          [:option {:value (name (:id a))} (:label a)])]
       
-      ;; Play/Pause
       [:button {:class (str "px-4 py-2 rounded font-bold text-white transition-colors "
                             (if running? "bg-amber-500 hover:bg-amber-600" "bg-green-500 hover:bg-green-600"))
                 :on-click toggle-running}
        (if running? "Pause" "Start")]
       
-      ;; Reset
       [:button {:class "px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 font-medium"
                 :on-click reset-game}
        "Reset"]
       
-      ;; Extra Actions (Dynamic)
       (for [[idx action] (map-indexed vector extra-actions)]
         ^{:key idx}
         [:button {:class "px-4 py-2 rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-medium"
@@ -296,24 +307,17 @@
                                  (swap! app-state (:fn action)))}
          (:label action)])
       
-      ;; Dark Mode Toggle
       [:label {:class "flex items-center gap-2 cursor-pointer select-none"}
        [:input {:type "checkbox"
                 :checked dark-mode?
                 :on-change #(swap! app-state update :dark-mode? not)}]
        [:span {:class "text-sm font-medium text-gray-700"} "Dark Mode"]]
       
-      ;; Speed
-      [:div {:class "flex items-center justify-between w-full"} ;; 1. w-full + justify-between
-
-       ;; Left Side
+      [:div {:class "flex items-center justify-between w-full"}
        [:div {:class "text-sm text-gray-500 font-mono"}
         (str "Generation: " generation)]
-
-       ;; Right Side (Wrapped in a div to stay together)
        [:div {:class "flex items-center gap-2"}
         [:span {:class "text-sm text-gray-500"} "Speed:"]
-
         [:input {:type "range" :min "10" :max "500" :step "10"
                  :value (- 510 speed)
                  :on-change #(swap! app-state assoc :speed (- 510 (.. % -target -value)))}]]]]]))
@@ -322,9 +326,9 @@
   [:div {:class "p-6 max-w-5xl mx-auto"}
    [:h1 {:class "text-3xl font-bold text-slate-800 mb-2"} "Cellular Automata"]
    [:p {:class "text-slate-600 mb-6"} 
-    "A showcase of different cellular automata rules running in the browser."]
+    "A showcase of different cellular automata rules running in the browser. Includes Game of Life, HighLife, Day & Night, Seeds, Maze, and Langton's Ant."]
    
-   [controls default-automata]
+   [controls]
    
    [:div {:class "flex justify-center overflow-auto"}
     [canvas-view]]
@@ -336,15 +340,15 @@
 
 (def plugin
   (plin/plugin
-   {:doc "Cellular Automata Showcase nested under Development."
+   {:doc "Cellular Automata Showcase - Game of Life, HighLife, Day & Night, Seeds, Maze, and Langton's Ant."
     :deps [iapp/plugin]
 
     :contributions
     {::iapp/nav-items [{:id :automata
                         :parent-id :development
                         :label "Cellular Automata"
-                        :description "Game of Life, HighLife, and Langton's Ant"
-                        :route "/development/automata"
+                        :description "Game of Life, HighLife, and more"
+                        :route "automata"
                         :icon icon-automata-hiccup
                         :icon-color "text-purple-600 bg-purple-50"
                         :component page

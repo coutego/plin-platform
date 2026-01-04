@@ -174,6 +174,7 @@
   (let [active-route (when (and current-route-atom (satisfies? IDeref current-route-atom)) 
                        @current-route-atom)
         Page (:component active-route)
+        params (:params active-route)
         required-perm (:required-perm active-route)
         user (when (and user-atom (satisfies? IDeref user-atom)) @user-atom)
         collapsed? (if sidebar-collapsed? (sidebar-collapsed?) false)]
@@ -202,7 +203,10 @@
         [:p "You do not have permission to view this page"]]
 
        :else
-       [Page])]))
+       ;; Pass route params to the page component if available
+       (if (and params (seq params))
+         [Page params]
+         [Page]))]))
 
 ;; --- Overlay Wrapper Component ---
 

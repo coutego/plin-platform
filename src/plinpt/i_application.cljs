@@ -42,24 +42,26 @@
 ;; --- Default Parent Page ---
 
 (defn default-parent-page [node]
-  [:div {:class "p-8"}
-   [:h1 {:class "text-2xl font-bold text-slate-900 mb-2"} (:label node)]
-   [:p {:class "text-slate-500 mb-8"} "Select an item from the list below:"]
-   
-   [:div {:class "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"}
-    (for [child (:children node)]
-      ^{:key (:id child)}
-      [:a {:href (str "#" (:full-route child))
-           :class "block p-6 bg-white border border-slate-200 rounded-xl hover:border-blue-500 hover:shadow-md transition-all group"}
-       [:div {:class "flex items-center gap-4 mb-2"}
-        (when (:icon child)
-          (let [color-class (or (:icon-color child) "text-slate-500 bg-slate-50 group-hover:text-blue-600 group-hover:bg-blue-50")]
-            [:div {:class (str "p-2 rounded-lg transition-colors " color-class)}
-             (:icon child)]))
-        [:h3 {:class "font-semibold text-slate-900 group-hover:text-blue-600 transition-colors"} 
-         (:label child)]]
-       (when (:description child)
-         [:p {:class "text-sm text-slate-500"} (:description child)])])]])
+  (let [;; Filter out hidden children
+        visible-children (filter #(not (:hidden %)) (:children node))]
+    [:div {:class "p-8"}
+     [:h1 {:class "text-2xl font-bold text-slate-900 mb-2"} (:label node)]
+     [:p {:class "text-slate-500 mb-8"} "Select an item from the list below:"]
+     
+     [:div {:class "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"}
+      (for [child visible-children]
+        ^{:key (:id child)}
+        [:a {:href (str "#" (:full-route child))
+             :class "block p-6 bg-white border border-slate-200 rounded-xl hover:border-blue-500 hover:shadow-md transition-all group"}
+         [:div {:class "flex items-center gap-4 mb-2"}
+          (when (:icon child)
+            (let [color-class (or (:icon-color child) "text-slate-500 bg-slate-50 group-hover:text-blue-600 group-hover:bg-blue-50")]
+              [:div {:class (str "p-2 rounded-lg transition-colors " color-class)}
+               (:icon child)]))
+          [:h3 {:class "font-semibold text-slate-900 group-hover:text-blue-600 transition-colors"} 
+           (:label child)]]
+         (when (:description child)
+           [:p {:class "text-sm text-slate-500"} (:description child)])])]]))
 
 ;; --- Logic: Extract Routes from Tree ---
 
@@ -159,7 +161,8 @@
             - :order (number) - Sort order.
             - :component (reagent component, optional) - If provided, a route is auto-created.
             - :layout (keyword, optional) - :default or :full-screen.
-            - :required-perm (keyword, optional) - Permission required to access."
+            - :required-perm (keyword, optional) - Permission required to access.
+            - :hidden (boolean, optional) - If true, hide from sidebar and auto-generated parent pages."
       :handler (plin/collect-all ::nav-items)}
      
      {:key ::header-components

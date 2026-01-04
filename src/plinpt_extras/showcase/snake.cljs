@@ -1,4 +1,4 @@
-(ns showcase.snake
+(ns plinpt-extras.showcase.snake
   (:require [plin.core :as plin]
             [reagent.core :as r]
             [plinpt.i-application :as iapp]))
@@ -8,7 +8,7 @@
 (def board-width 20)
 (def board-height 20)
 (def initial-snake [[10 10] [10 11] [10 12]])
-(def initial-dir [0 -1]) ;; Moving Up
+(def initial-dir [0 -1])
 (def tick-rate 150)
 
 (defn rand-pos []
@@ -38,23 +38,19 @@
         [dx dy] direction
         new-head [(+ head-x dx) (+ head-y dy)]]
     (cond
-      ;; Collision with walls
       (or (< (first new-head) 0)
           (>= (first new-head) board-width)
           (< (second new-head) 0)
           (>= (second new-head) board-height)
-          ;; Collision with self (excluding tail which moves away)
           (some #{new-head} (drop-last snake)))
       (assoc g :game-over? true)
 
-      ;; Eat food
       (= new-head food)
       (-> g
-          (update :snake #(cons new-head %)) ;; Grow
+          (update :snake #(cons new-head %))
           (update :score inc)
           (assoc :food (rand-pos)))
 
-      ;; Move normal
       :else
       (assoc g :snake (cons new-head (drop-last snake))))))
 
@@ -72,10 +68,10 @@
      {:style {:width "100%"
               :height "100%"
               :background-color (cond
-                                  is-head? "#4ade80" ;; Green-400
-                                  is-snake? "#86efac" ;; Green-300
-                                  is-food? "#f87171" ;; Red-400
-                                  :else "#1e293b") ;; Slate-800
+                                  is-head? "#4ade80"
+                                  is-snake? "#86efac"
+                                  is-food? "#f87171"
+                                  :else "#1e293b")
               :border-radius (if is-food? "50%" (if is-snake? "4px" "0"))
               :transition "all 0.1s"}}]))
 
@@ -89,7 +85,7 @@
               :width "100%"
               :max-width "500px"
               :aspect-ratio "1/1"
-              :background-color "#334155" ;; Slate-700
+              :background-color "#334155"
               :border "4px solid #475569"
               :border-radius "8px"
               :padding "4px"}}
@@ -124,16 +120,13 @@
   (r/create-class
    {:component-did-mount
     (fn []
-      ;; Reset game on mount
       (reset! state (new-game))
-      ;; Setup Key Listener
       (js/window.addEventListener "keydown"
         (fn [e]
           (let [k (.-key e)]
             (when (#{"ArrowUp" "ArrowDown" "ArrowLeft" "ArrowRight"} k)
               (.preventDefault e)
               (swap! state update :direction #(or (key->dir k %) %))))))
-      ;; Setup Timer
       (defonce timer (js/setInterval tick! tick-rate)))
 
     :component-will-unmount
@@ -167,7 +160,7 @@
 
 (def plugin
   (plin/plugin
-   {:doc "A classic Snake game nested under Development."
+   {:doc "A classic Snake game showcase."
     :deps [iapp/plugin]
 
     :contributions
@@ -175,8 +168,8 @@
                         :parent-id :development
                         :label "Snake"
                         :description "Classic snake game"
-                        :route "/development/snake"
+                        :route "snake"
                         :icon icon-snake
                         :icon-color "text-green-600 bg-green-50"
                         :component snake-game-component
-                        :order 99}]}}))
+                        :order 51}]}}))

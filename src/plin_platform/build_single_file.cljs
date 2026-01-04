@@ -295,6 +295,7 @@
               "libs/injectable/easy.cljc"
               "libs/injectable/container.cljc"
               "libs/injectable/core.cljc"
+              "libs/plin/bean_redefs.cljc"
               "libs/plin/core.cljc"
               "libs/plin/boot.cljc"]
         plugins (get-manifest-files)

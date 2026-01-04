@@ -89,10 +89,14 @@
    Returns updated db with bean redefinitions applied."
   [db bean-redefs-list]
   (let [current-beans (get db :beans {})
+        ;; Filter out nil values from the list
+        valid-redefs (filter some? bean-redefs-list)
         updated-beans (reduce (fn [beans redefs-map]
-                                (reduce-kv process-single-bean-redef beans redefs-map))
+                                (if (map? redefs-map)
+                                  (reduce-kv process-single-bean-redef beans redefs-map)
+                                  beans))
                               current-beans
-                              bean-redefs-list)]
+                              valid-redefs)]
     (assoc db :beans updated-beans)))
 
 ;; =============================================================================

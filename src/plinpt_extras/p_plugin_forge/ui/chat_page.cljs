@@ -80,18 +80,23 @@
       (str/replace #"<" "&lt;")
       (str/replace #">" "&gt;")
       ;; Comments - gray/muted
-      (str/replace #"(;[^\n]*)" "<span class=\"text-slate-500\">$1</span>")
+      (str/replace #"(;[^\n]*)" 
+                   (fn [[_ m]] (str "<span class=\"text-slate-500\">" m "</span>")))
       ;; Strings - green
-      (str/replace #"(\"(?:[^\"\\]|\\.)*\")" "<span class=\"text-emerald-400\">$1</span>")
+      (str/replace #"(\"(?:[^\"\\]|\\.)*\")" 
+                   (fn [[_ m]] (str "<span class=\"text-emerald-400\">" m "</span>")))
       ;; Keywords - cyan
-      (str/replace #"(:[a-zA-Z0-9\-_\.\/\*\+\!\?]+)" "<span class=\"text-cyan-400\">$1</span>")
-      ;; Special forms and macros - purple/magenta
-      (str/replace #"\b(ns|def|defn|defonce|defn-|fn|let|if|when|cond|case|do|loop|recur|try|catch|throw|for|doseq|dotimes|require|import|use|partial|atom|swap!|reset!|deref|and|or|not)\b" 
-                   "<span class=\"text-fuchsia-400 font-semibold\">$1</span>")
+      (str/replace #"(:[a-zA-Z0-9\-_\.\/\*\+\!\?]+)" 
+                   (fn [[_ m]] (str "<span class=\"text-cyan-400\">" m "</span>")))
       ;; Boolean and nil - orange
-      (str/replace #"\b(true|false|nil)\b" "<span class=\"text-orange-400\">$1</span>")
+      (str/replace #"\b(true|false|nil)\b" 
+                   (fn [[_ m]] (str "<span class=\"text-orange-400\">" m "</span>")))
       ;; Numbers - orange/yellow
-      (str/replace #"\b(\d+\.?\d*)\b" "<span class=\"text-amber-300\">$1</span>")))
+      (str/replace #"\b(\d+\.?\d*)\b" 
+                   (fn [[_ m]] (str "<span class=\"text-amber-300\">" m "</span>")))
+      ;; Special forms and macros - purple/magenta
+      (str/replace #"(?<![a-zA-Z0-9\-_])(ns|def|defn|defonce|defn-|fn|let|if|when|cond|case|do|loop|recur|try|catch|throw|for|doseq|dotimes|require|import|use|partial|atom|swap!|reset!|deref|and|or|not)(?![a-zA-Z0-9\-_])" 
+                   (fn [[_ m]] (str "<span class=\"text-fuchsia-400 font-semibold\">" m "</span>")))))
 
 (defn code-block [code]
   [:pre {:class "bg-slate-900 text-slate-300 p-4 rounded-lg overflow-x-auto text-xs font-mono mt-2"}

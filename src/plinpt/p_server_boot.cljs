@@ -15,16 +15,19 @@
 (def user-root (js/process.cwd))
 
 ;; Framework root detection:
-;; When running as a dependency, we need to find node_modules/plin-platform
+;; When running as a dependency, we need to find node_modules/@coutego/plin-platform
 ;; When running from the repo itself, use cwd
 (def framework-root
   (let [cwd (js/process.cwd)
-        ;; Check if plin-platform exists in node_modules (running as dependency)
+        ;; Check if @coutego/plin-platform exists in node_modules (scoped package)
+        scoped-nm-path (path/join cwd "node_modules/@coutego/plin-platform")
+        ;; Check if plin-platform exists in node_modules (old unscoped package)
         nm-path (path/join cwd "node_modules/plin-platform")]
-    (if (fs/existsSync nm-path)
-      nm-path
+    (cond
+      (fs/existsSync scoped-nm-path) scoped-nm-path
+      (fs/existsSync nm-path) nm-path
       ;; Running from the repo itself
-      cwd)))
+      :else cwd)))
 
 (defn resolve-path [url]
   (let [clean-url (first (str/split url #"\?"))]

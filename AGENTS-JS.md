@@ -659,3 +659,21 @@ The `plin.useAtom()` hook:
 5. Returns an unwatch function for cleanup when component unmounts
 
 This is why `useAtom` must be called inside a React component - it uses React hooks internally.
+
+# Creating a New Project
+
+To create a new PLIN project with JavaScript plugin support:
+
+``` bash
+# Create a new project
+npx @coutego/create-plin-app my-app
+
+# Or with JSX/TSX support
+npx @coutego/create-plin-app my-app --jsx
+
+# Start the development server
+cd my-app
+npm start
+```
+
+The `--jsx` flag sets up esbuild for compiling TypeScript/JSX plugins.

@@ -22,10 +22,13 @@ To create a new application based on PLIN Platform, you can use the initializati
 
 #+BEGIN_SRC bash
 # Using npx (recommended - uses the published npm package)
-npx --package=plin-platform create-plin-app my-app
+npx @coutego/create-plin-app my-app
+
+# With JSX/TSX support
+npx @coutego/create-plin-app my-app --jsx
 
 # Or if developing locally, run from the repo root:
-node bin/create-plin-app.js my-app
+node packages/create-plin-app/bin/create-plin-app.js my-app
 #+END_SRC
 
 This command will:
@@ -565,3 +568,31 @@ To make the plugin permanent, add to ~plin.edn~:
 #+END_SRC
 
 *** Example 2: Zen Mode
+
+** Publishing
+
+This project is published as two npm packages:
+
+- *@coutego/plin-platform*: The core platform library
+- *@coutego/create-plin-app*: CLI tool for scaffolding new projects
+
+*** Publishing the Platform
+
+#+BEGIN_SRC bash
+npm publish --access public
+#+END_SRC
+
+*** Publishing create-plin-app
+
+#+BEGIN_SRC bash
+cd packages/create-plin-app
+npm publish --access public
+#+END_SRC
+
+*** Version Synchronization
+
+When releasing a new version, update the version in both:
+- ~package.json~ (root)
+- ~packages/create-plin-app/package.json~
+
+Also update the dependency version in ~packages/create-plin-app/bin/create-plin-app.js~.

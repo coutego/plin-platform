@@ -1,10 +1,9 @@
 {
-  "name": "plin-platform",
-  "version": "0.4.3",
+  "name": "@coutego/plin-platform",
+  "version": "0.5.4",
   "description": "Pluggable & Injectable Platform for ClojureScript",
   "main": "src/plin_platform/server.cljs",
   "bin": {
-    "create-plin-app": "bin/create-plin-app.js",
     "generate-server-boot": "bin/generate-server-boot.js"
   },
   "files": [
@@ -14,8 +13,10 @@
     "libs",
     "public",
     "bin",
+    "README.org",
+    "AGENTS.md",
     "README-JS.org",
-    "AGENTS-JS.org"
+    "AGENTS-JS.md"
   ],
   "scripts": {
     "start": "node bin/generate-server-boot.js --run",

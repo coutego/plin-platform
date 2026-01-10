@@ -436,10 +436,10 @@ public/plugins/
 
 ** Creating a New Project with JSX Support
 
-Use the =--jsx= flag with =create-plin-app=:
+Use the =--jsx= flag with =@coutego/create-plin-app=:
 
 #+BEGIN_SRC bash
-npx create-plin-app my-app --jsx
+npx @coutego/create-plin-app my-app --jsx
 cd my-app
 npm start
 #+END_SRC

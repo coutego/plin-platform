@@ -114,12 +114,21 @@ function findUserManifestPath() {
 }
 
 function findPlatformManifestPath() {
+  // Check if running from the plin-platform repo itself
   const repoSrcPath = path.join(userRoot, 'src/plinpt/plin.edn');
   if (fs.existsSync(repoSrcPath)) return repoSrcPath;
   
   const repoLibsPath = path.join(userRoot, 'libs/plinpt/plin.edn');
   if (fs.existsSync(repoLibsPath)) return repoLibsPath;
   
+  // Check scoped package name (@coutego/plin-platform)
+  const scopedSrcPath = path.join(userRoot, 'node_modules/@coutego/plin-platform/src/plinpt/plin.edn');
+  if (fs.existsSync(scopedSrcPath)) return scopedSrcPath;
+  
+  const scopedLibsPath = path.join(userRoot, 'node_modules/@coutego/plin-platform/libs/plinpt/plin.edn');
+  if (fs.existsSync(scopedLibsPath)) return scopedLibsPath;
+  
+  // Fallback: check old unscoped package name (plin-platform) for backwards compatibility
   const depSrcPath = path.join(userRoot, 'node_modules/plin-platform/src/plinpt/plin.edn');
   if (fs.existsSync(depSrcPath)) return depSrcPath;
   

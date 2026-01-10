@@ -1,0 +1,28 @@
+{
+  "name": "@coutego/create-plin-app",
+  "version": "0.5.4",
+  "description": "Create a new PLIN Platform application",
+  "bin": {
+    "create-plin-app": "bin/create-plin-app.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "cli",
+    "plin",
+    "clojurescript",
+    "scaffolding",
+    "create-app"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coutego/plin-platform.git",
+    "directory": "packages/create-plin-app"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

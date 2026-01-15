@@ -134,10 +134,10 @@
           "src/plinpt/p_admin_authorization.cljs"]
   :entry "plinpt.p-admin-authorization"}
 
- {:id :plinpt.p-ui-components 
-  :envs [:browser] 
+ {:id :plinpt.p-ui-components
+  :envs [:browser]
   :files ["src/plinpt/p_ui_components/core.cljs"
-          "src/plinpt/p_ui_components.cljs"]
+           "src/plinpt/p_ui_components.cljs"]
   :entry "plinpt.p-ui-components"}
 
  {:id :plinpt.p-devdoc

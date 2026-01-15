@@ -179,7 +179,7 @@
         user (when (and user-atom (satisfies? IDeref user-atom)) @user-atom)
         collapsed? (if sidebar-collapsed? (sidebar-collapsed?) false)]
 
-    [:main {:class (str "flex-1 p-6 md:p-8 overflow-x-hidden transition-all duration-300 "
+    [:main {:class (str "flex-1 p-6 md:p-8 overflow-y-auto overflow-x-hidden transition-all duration-300 "
                         (if collapsed? "ml-0" "ml-64"))}
      ;; Breadcrumbs
      [breadcrumb trail-data trail-actions]
@@ -233,7 +233,7 @@
   ;; Compute homepage path for header link
   (let [homepage-path (resolve-homepage homepage structure)]
     ;; Render the layout
-    [:div {:class "min-h-screen text-slate-600"}
+    [:div {:class "h-screen overflow-hidden text-slate-600"}
      ;; Header (always visible, full width)
      [error-boundary
       [header name subtitle logo user-data user-actions sidebar-toggle! homepage-path]]
@@ -243,7 +243,7 @@
        [error-boundary [login-modal]])
 
      ;; Main layout
-     [:div {:class "flex pt-16 min-h-screen"}
+     [:div {:class "flex pt-16 h-full"}
       ;; Sidebar (Injected)
       (when sidebar-ui 
         [error-boundary [sidebar-ui]])

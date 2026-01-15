@@ -7,3 +7,6 @@ package-lock.json
 /README.html
 /public/plugins/
 /target/
+
+# Vendor cache for standalone builds (downloaded on demand)
+node_modules/.cache/plin-vendor/

@@ -1,6 +1,6 @@
 {
   "name": "@coutego/create-plin-app",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Create a new PLIN Platform application",
   "bin": {
     "create-plin-app": "bin/create-plin-app.js"

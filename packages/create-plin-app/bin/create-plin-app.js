@@ -75,7 +75,7 @@ async function main() {
       version: '0.1.0',
       private: true,
       dependencies: {
-        "@coutego/plin-platform": "^0.5.0",
+        "@coutego/plin-platform": "^0.5.5",
         "nbb": "^1.3.205",
         "react": "^18.2.0"
       },

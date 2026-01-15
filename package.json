@@ -1,6 +1,6 @@
 {
   "name": "@coutego/plin-platform",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Pluggable & Injectable Platform for ClojureScript",
   "main": "src/plin_platform/server.cljs",
   "bin": {
@@ -22,6 +22,12 @@
     "start": "node bin/generate-server-boot.js --run",
     "start:dev": "nbb -m plin-platform.server",
     "build": "nbb -m plin-platform.build-single-file",
+    "build:standalone": "nbb -m plin-platform.build-standalone",
+    "build:standalone:gz": "nbb -m plin-platform.build-standalone -- --compress=gz",
+    "build:standalone:zip": "nbb -m plin-platform.build-standalone -- --compress=zip",
+    "build:standalone:7z": "nbb -m plin-platform.build-standalone -- --compress=7z",
+    "build:standalone:all": "nbb -m plin-platform.build-standalone -- --compress=all",
+    "vendor:download": "nbb -m plin-platform.vendor",
     "generate-boot": "node bin/generate-server-boot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

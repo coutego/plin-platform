@@ -14,7 +14,8 @@
             [injectable.core]
             [plin.core]
             [plin.boot]
-            [plin-platform.client-boot]))
+            [plin-platform.client-boot]
+            [plin-platform.build-standalone :as standalone]))
 
 (def current-env "browser")
 (def current-mode "demo")
@@ -143,7 +144,7 @@
 ;; When running from repo: cwd
 ;; Use fs.realpathSync to resolve symlinks (important for npm link)
 (def framework-root
-  (let [nm-path (path/join user-root "node_modules/plin-platform")]
+  (let [nm-path (path/join user-root "node_modules/@coutego/plin-platform")]
     (if (fs/existsSync nm-path)
       ;; Resolve symlinks to get the real path
       (fs/realpathSync nm-path)
@@ -366,7 +367,17 @@
                        (remove nil?))]
       (str/join "\n" scripts))))
 
+(defn- standalone-requested?
+  "Check if --standalone flag is present in args."
+  [args]
+  (some #(or (= % "--standalone") (str/starts-with? % "--compress=")) args))
+
 (defn -main [& args]
+  ;; Check for standalone mode
+  (when (standalone-requested? args)
+    (apply standalone/-main args)
+    (js/process.exit 0))
+  
   (println "Building single file application (via nbb)...")
   (println "Environment:" current-env "| Mode:" current-mode)
   (println "User root:" user-root)
